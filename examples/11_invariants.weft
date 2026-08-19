@@ -1,0 +1,56 @@
+# Type invariants [W42]: a `where` on a record type makes it nominal, and the
+# invariant is checked at every construction and copy. Because values are
+# immutable, a value that exists satisfies its invariant — always.
+
+type Account = {owner: Text, balance: Int} where balance >= 0 and text_len(owner) > 0
+
+def open_account(owner: Text where text_len(owner) > 0) -> Account =
+  Account{owner: owner, balance: 0}
+
+def deposit(a: Account, amount: Int where amount > 0) -> Account =
+  Account{..a, balance: a.balance + amount}
+
+# The Err branch is the only way out when funds are short — constructing the
+# overdrawn Account directly would halt with [W42].
+def withdraw(a: Account, amount: Int where amount > 0) -> Result[Account, Text] =
+  if amount > a.balance
+  then Err("insufficient funds: have " ++ text_of_int(a.balance) ++ ", want " ++ text_of_int(amount))
+  else Ok(Account{..a, balance: a.balance - amount})
+
+# v0.2 stdlib: find / index_of [§10]; unary minus [W25].
+def first_negative(xs: List[Int]) -> Option[Int] =
+  find(xs, (x: Int) => x < 0)
+
+test "deposit accumulates" =
+  deposit(deposit(open_account("ada"), 3), 4).balance == 7
+
+test "withdraw within balance" =
+  withdraw(deposit(open_account("ada"), 10), 4) == Ok(Account{owner: "ada", balance: 6})
+
+test "overdraw is an Err, not a negative balance" =
+  match withdraw(open_account("ada"), 1) {
+    Err(m) => contains(m, "insufficient"),
+    Ok(_) => false,
+  }
+
+test "balance never negative" (start: Int where start >= 0, take: Int where take > 0) = {
+  let acct = deposit(open_account("x"), start + 1);
+  match withdraw(acct, take) {
+    Ok(after) => after.balance >= 0,
+    Err(_) => true,
+  }
+}
+
+test "find first negative" = first_negative([3, -4, 5]) == Some(-4)
+test "find none" = first_negative([1, 2]) == None
+test "index_of hit" = index_of(["a", "b", "c"], "b") == Some(1)
+test "index_of miss" = index_of([1, 2], 9) == None
+test "unary minus" = -(3 + 4) == -7 and max(-5, -(-5)) == 5
+
+def main(io: Io) -> Int = {
+  let acct = deposit(open_account("ada"), 100);
+  match withdraw(acct, 30) {
+    Ok(after) => { let _ = print(io, after.owner ++ ": " ++ text_of_int(after.balance)); 0 },
+    Err(e) => { let _ = print(io, e); 1 },
+  }
+}

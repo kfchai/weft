@@ -1,0 +1,33 @@
+def sum_first(xs: List[Int], k: Int) -> Option[Int] =
+  if k == 0 then Some(0)
+  else match xs {
+    [] => None,
+    [x, ..rest] => match sum_first(rest, k - 1) {
+      None => None,
+      Some(s) => Some(x + s),
+    },
+  }
+
+def max_window_from(xs: List[Int], k: Int) -> Option[Int] =
+  match xs {
+    [] => None,
+    [x, ..rest] => match sum_first(xs, k) {
+      None => None,
+      Some(s) => match max_window_from(rest, k) {
+        None => Some(s),
+        Some(m) => Some(max(s, m)),
+      },
+    },
+  }
+
+def max_window_sum(xs: List[Int], k: Int where k >= 1) -> Option[Int] = max_window_from(xs, k)
+
+test "window basic" = max_window_sum([2, 1, 5, 1, 3, 2], 3) == Some(9)
+test "window too long" = max_window_sum([1, 2], 3) == None
+test "window exact" = max_window_sum([1, 2, 3], 3) == Some(6)
+test "window one" (xs: List[Int]) = max_window_sum(xs, 1) == match xs {
+  [] => None,
+  [x, ..rest] => Some(max(x, if len(rest) == 0 then x else unwrap_or(max_window_sum(rest, 1), x))),
+}
+
+def main(io: Io) -> Int = 0

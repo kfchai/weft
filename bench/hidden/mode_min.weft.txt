@@ -1,0 +1,6 @@
+
+test "hidden mode single" = mode_min([1]) == 1
+test "hidden mode simple" = mode_min([1, 2, 2]) == 2
+test "hidden mode tie" = mode_min([2, 2, 1, 1]) == 1
+test "hidden mode tie3" = mode_min([3, 3, 1, 1, 2]) == 1
+test "hidden mode late" = mode_min([5, 4, 5, 4, 4]) == 4

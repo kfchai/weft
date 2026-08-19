@@ -1,0 +1,7 @@
+
+assert max_window_sum([1, 2, 3, 4], 2) == 7, "basic"
+assert max_window_sum([], 1) is None, "empty"
+assert max_window_sum([5], 1) == 5, "one"
+assert max_window_sum([2, -1, 3], 2) == 2, "negs"
+assert max_window_sum([1, 2, 3], 5) is None, "too big"
+print("ALL HIDDEN TESTS PASS")

@@ -1,0 +1,103 @@
+# EXIT-TEST submission — task: inventory (spec v0.2 probe) — graded by weftc below.
+# Probes: [W42] invariants discovered from spec alone, nominal construction,
+# Err-instead-of-invalid-construction, stdlib find, property tests.
+
+# [W42] nominal record with invariant: the language itself makes
+# negative quantities and empty names unconstructible anywhere.
+type Item = {name: Text, qty: Int} where qty >= 0 and name != ""
+
+# Convenience constructor; the Item invariant still guards every construction.
+def mk(name: Text, qty: Int) -> Item = Item{name: name, qty: qty}
+
+# Add n > 0 units; contract on n per [W17]/[W28].
+def restock(item: Item, n: Int where n > 0) -> Item =
+  Item{..item, qty: item.qty + n}
+
+# Remove n > 0 units; never constructs an invalid Item — the insufficient
+# case returns Err before any construction happens.
+def ship(item: Item, n: Int where n > 0) -> Result[Item, Text] =
+  if n > item.qty then
+    Err("insufficient stock for " ++ item.name ++ ": have "
+        ++ text_of_int(item.qty) ++ ", need " ++ text_of_int(n))
+  else
+    Ok(Item{..item, qty: item.qty - n})
+
+# Sum of quantities over a list of items.
+def total_quantity(items: List[Item]) -> Int =
+  fold(items, 0, (acc: Int, it: Item) => acc + it.qty)
+
+# First item with zero stock, via stdlib find.
+def first_out_of_stock(items: List[Item]) -> Option[Item] =
+  find(items, (it: Item) => it.qty == 0)
+
+# ---------------- unit tests ----------------
+
+test "restock adds units and keeps name" = {
+  let it = restock(mk("widget", 10), 5);
+  it.qty == 15 and it.name == "widget"
+}
+
+test "ship success removes units" =
+  match ship(mk("gadget", 5), 3) {
+    Ok(it) => it.qty == 2 and it.name == "gadget",
+    Err(_) => false,
+  }
+
+test "ship can empty the stock exactly" =
+  match ship(mk("gadget", 4), 4) {
+    Ok(it) => it.qty == 0,
+    Err(_) => false,
+  }
+
+test "ship insufficient stock fails with descriptive error" =
+  match ship(mk("bolt", 2), 5) {
+    Ok(_) => false,
+    Err(m) => contains(m, "insufficient") and contains(m, "bolt"),
+  }
+
+test "total_quantity sums a list" =
+  total_quantity([mk("a", 1), mk("b", 2), mk("c", 3)]) == 6
+
+test "total_quantity of empty list is zero" =
+  total_quantity([]) == 0
+
+test "first_out_of_stock finds first zero" =
+  match first_out_of_stock([mk("a", 3), mk("b", 0), mk("c", 0)]) {
+    Some(it) => it.name == "b",
+    None => false,
+  }
+
+test "first_out_of_stock is None when all stocked" =
+  first_out_of_stock([mk("a", 3), mk("b", 1)]) == None
+
+# ---------------- property tests ----------------
+
+test "restock increases qty by exactly n"
+  (q: Int where q >= 0, n: Int where n > 0) =
+  restock(Item{name: "x", qty: q}, n).qty == q + n
+
+test "ship never yields negative stock and errs iff insufficient"
+  (q: Int where q >= 0, n: Int where n > 0) =
+  match ship(Item{name: "x", qty: q}, n) {
+    Ok(it) => it.qty >= 0 and it.qty == q - n,
+    Err(_) => n > q,
+  }
+
+test "total_quantity is never negative" (qs: List[Int]) =
+  total_quantity(map(qs, (q: Int) => Item{name: "x", qty: abs(q)})) >= 0
+
+# ---------------- entry point [W8] ----------------
+
+def main(io: Io) -> Int = {
+  let stock = [mk("widget", 10), mk("gadget", 0), mk("gizmo", 3)];
+  let _ = print(io, "total on hand: " ++ text_of_int(total_quantity(stock)));
+  let _ = match first_out_of_stock(stock) {
+    Some(it) => print(io, "out of stock: " ++ it.name),
+    None => print(io, "nothing out of stock"),
+  };
+  let widget = restock(mk("widget", 10), 5);
+  match ship(widget, 20) {
+    Ok(it) => { let _ = print(io, "shipped; left: " ++ text_of_int(it.qty)); 0 },
+    Err(m) => { let _ = print(io, m); 0 },
+  }
+}

@@ -1,0 +1,91 @@
+# EXIT-TEST submission — task: safe-config — verdict: PASS (no spec violations)
+# Values containing '=' handled by rejoining split parts; `?` chained through
+# ok_or Option->Result conversions per [W26]; distinct error messages per case.
+
+type Config = {host: Text, port: Int, retries: Int}
+type Pair = {key: Text, val: Text}
+
+# Parse one non-empty line of the form "key=value".
+def parse_line(line: Text) -> Result[Pair, Text] =
+  if contains(line, "=") then {
+    let parts = split(line, "=");
+    match parts {
+      [k, ..rest] => Ok({key: trim(k), val: trim(join(rest, "="))}),
+      [] => Err("malformed line (no \"=\"): " ++ line),
+    }
+  } else Err("malformed line (no \"=\"): " ++ line)
+
+# Parse every non-blank line into a key/value pair.
+def parse_pairs(lines: List[Text]) -> Result[List[Pair], Text] =
+  match lines {
+    [] => Ok([]),
+    [line, ..rest] =>
+      if trim(line) == "" then parse_pairs(rest)
+      else {
+        let p = parse_line(line)?;
+        let ps = parse_pairs(rest)?;
+        Ok([p] ++ ps)
+      },
+  }
+
+def find_val(pairs: List[Pair], k: Text) -> Option[Text] =
+  match pairs {
+    [] => None,
+    [p, ..rest] => if p.key == k then Some(p.val) else find_val(rest, k),
+  }
+
+def require_text(pairs: List[Pair], k: Text) -> Result[Text, Text] =
+  ok_or(find_val(pairs, k), "missing required key: " ++ k)
+
+def require_int(pairs: List[Pair], k: Text) -> Result[Int, Text] = {
+  let raw = require_text(pairs, k)?;
+  ok_or(int_of_text(raw), "non-integer value for key \"" ++ k ++ "\": " ++ raw)
+}
+
+def parse_config(source: Text) -> Result[Config, Text] = {
+  let pairs = parse_pairs(split(source, "\n"))?;
+  let host = require_text(pairs, "host")?;
+  let port = require_int(pairs, "port")?;
+  let retries = require_int(pairs, "retries")?;
+  Ok({host: host, port: port, retries: retries})
+}
+
+test "success: all keys present and ints parse" =
+  match parse_config("host=example.com\nport=8080\nretries=3") {
+    Ok(c) => c.host == "example.com" and c.port == 8080 and c.retries == 3,
+    Err(_) => false,
+  }
+
+test "failure: malformed line without equals sign" =
+  match parse_config("host=example.com\nportnumber\nretries=3") {
+    Ok(_) => false,
+    Err(e) => contains(e, "malformed line"),
+  }
+
+test "failure: missing required key retries" =
+  match parse_config("host=example.com\nport=8080") {
+    Ok(_) => false,
+    Err(e) => contains(e, "missing required key: retries"),
+  }
+
+test "failure: non-integer value for port" =
+  match parse_config("host=example.com\nport=eighty\nretries=3") {
+    Ok(_) => false,
+    Err(e) => contains(e, "non-integer value for key \"port\""),
+  }
+
+def main(io: Io) -> Int = {
+  let sample = "host=example.com\nport=8080\nretries=3";
+  match parse_config(sample) {
+    Ok(c) => {
+      let _ = print(io, "host: " ++ c.host);
+      let _ = print(io, "port: " ++ text_of_int(c.port));
+      let _ = print(io, "retries: " ++ text_of_int(c.retries));
+      0
+    },
+    Err(e) => {
+      let _ = print(io, "config error: " ++ e);
+      1
+    },
+  }
+}

@@ -1,0 +1,56 @@
+# Luhn checksum: all digits, length >= 2, weighted sum divisible by 10.
+
+def digit_chars: List[Text] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+
+def digit_of_char(c: Text) -> Option[Int] = index_of(digit_chars, c)
+
+def digits_of(cs: List[Text]) -> Option[List[Int]] =
+  match cs {
+    [] => Some([]),
+    [c, ..rest] => match digit_of_char(c) {
+      None => None,
+      Some(d) => match digits_of(rest) {
+        None => None,
+        Some(ds) => Some([d] ++ ds),
+      },
+    },
+  }
+
+def luhn_from_right(ds: List[Int], pos: Int) -> Int =
+  match ds {
+    [] => 0,
+    [d, ..rest] => {
+      let raw = if pos % 2 == 1 then d * 2 else d;
+      let contrib = if raw > 9 then raw - 9 else raw;
+      contrib + luhn_from_right(rest, pos + 1)
+    },
+  }
+
+def luhn(t: Text) -> Bool = {
+  let cs = chars(t);
+  if text_len(t) < 2 then false
+  else match digits_of(cs) {
+    None => false,
+    Some(ds) => luhn_from_right(reverse(ds), 0) % 10 == 0,
+  }
+}
+
+test "empty" = not luhn("")
+test "too short" = not luhn("0")
+test "single digit" = not luhn("5")
+test "double zero" = luhn("00")
+test "eighteen" = luhn("18")
+test "fifty nine" = luhn("59")
+test "not eighteen" = not luhn("19")
+test "wikipedia" = luhn("79927398713")
+test "wikipedia bad" = not luhn("79927398710")
+test "visa test" = luhn("4111111111111111")
+test "visa test bad" = not luhn("4111111111111112")
+test "letters" = not luhn("ab")
+test "mixed" = not luhn("12a4")
+test "three" = not luhn("123")
+
+test "short never valid" (t: Text where text_len(t) < 2) = not luhn(t)
+test "valid is long" (t: Text) = if luhn(t) then text_len(t) >= 2 else true
+
+def main(io: Io) -> Int = 0

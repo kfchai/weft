@@ -1,0 +1,4 @@
+* text=auto
+*.weft text
+*.rs text
+*.md text

@@ -1,0 +1,47 @@
+# A tiny interpreter written in Weft — variants, nested match, recursion,
+# Result propagation, all in one file. This is the seed of the metacircular
+# evaluator (SPEC deliverable): the same shape, extended form by form.
+
+type Expr =
+    Num(Int)
+  | Add(Expr, Expr)
+  | Mul(Expr, Expr)
+  | Div(Expr, Expr)
+  | Let(Text, Expr, Expr)   # Let(name, bound, body)
+  | Var(Text)
+
+type Binding = {name: Text, value: Int}
+
+def lookup(env: List[Binding], name: Text) -> Option[Int] =
+  match env {
+    [] => None,
+    [b, ..rest] => if b.name == name then Some(b.value) else lookup(rest, name),
+  }
+
+def eval(env: List[Binding], e: Expr) -> Result[Int, Text] =
+  match e {
+    Num(n) => Ok(n),
+    Add(a, b) => Ok(eval(env, a)? + eval(env, b)?),
+    Mul(a, b) => Ok(eval(env, a)? * eval(env, b)?),
+    Div(a, b) => {
+      let d = eval(env, b)?;
+      if d == 0 then Err("division by zero") else Ok(eval(env, a)? / d)
+    },
+    Let(name, bound, body) => {
+      let v = eval(env, bound)?;
+      eval([{name: name, value: v}] ++ env, body)
+    },
+    Var(name) => ok_or(lookup(env, name), "unbound variable: " ++ name),
+  }
+
+test "arithmetic" = eval([], Add(Num(2), Mul(Num(3), Num(4)))) == Ok(14)
+test "let scoping" =
+  eval([], Let("x", Num(5), Add(Var("x"), Var("x")))) == Ok(10)
+test "shadowing: inner let wins" =
+  eval([], Let("x", Num(1), Let("x", Num(2), Var("x")))) == Ok(2)
+test "unbound is an Err" =
+  eval([], Var("ghost")) == Err("unbound variable: ghost")
+test "div by zero is an Err, not a halt" =
+  eval([], Div(Num(1), Num(0))) == Err("division by zero")
+
+def main(io: Io) -> Int = 0

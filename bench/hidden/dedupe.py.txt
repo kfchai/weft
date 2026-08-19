@@ -1,0 +1,7 @@
+
+assert dedupe([]) == [], "empty"
+assert dedupe([1, 1, 2, 1]) == [1, 2, 1], "mixed"
+assert dedupe([3, 3, 3]) == [3], "all same"
+assert dedupe([1, 2, 3]) == [1, 2, 3], "none"
+assert dedupe([5, 5, 4, 4, 5]) == [5, 4, 5], "pairs"
+print("ALL HIDDEN TESTS PASS")

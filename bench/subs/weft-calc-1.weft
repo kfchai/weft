@@ -1,0 +1,150 @@
+# Weft calculator — TASK calc
+# Grammar:
+#   expr    := term (('+' | '-') term)*
+#   term    := factor (('*' | '/') factor)*
+#   factor  := '-' factor | primary
+#   primary := number | '(' expr ')'
+# Parser state threads a value and the remaining characters.
+
+type PS = {value: Int, rest: List[Text]}
+
+def is_digit(c: Text) -> Bool = contains("0123456789", c)
+
+def digit_val(c: Text) -> Int = unwrap_or(int_of_text(c), 0)
+
+def skip_ws(cs: List[Text]) -> List[Text] =
+  match cs {
+    [" ", ..rest] => skip_ws(rest),
+    _ => cs,
+  }
+
+def parse_digits(cs: List[Text], acc: Int) -> PS =
+  match cs {
+    [c, ..rest] =>
+      if is_digit(c)
+      then parse_digits(rest, acc * 10 + digit_val(c))
+      else {value: acc, rest: cs},
+    [] => {value: acc, rest: []},
+  }
+
+def parse_primary(cs: List[Text]) -> Result[PS, Text] = {
+  let s = skip_ws(cs);
+  match s {
+    ["(", ..rest] => {
+      let r = parse_expr(rest)?;
+      let s2 = skip_ws(r.rest);
+      match s2 {
+        [")", ..rest2] => Ok({value: r.value, rest: rest2}),
+        _ => Err("syntax error: expected closing parenthesis"),
+      }
+    },
+    [c, ..rest] =>
+      if is_digit(c)
+      then Ok(parse_digits(s, 0))
+      else Err("syntax error: unexpected character"),
+    [] => Err("syntax error: unexpected end of input"),
+  }
+}
+
+def parse_factor(cs: List[Text]) -> Result[PS, Text] = {
+  let s = skip_ws(cs);
+  match s {
+    ["-", ..rest] => {
+      let r = parse_factor(rest)?;
+      Ok({value: 0 - r.value, rest: r.rest})
+    },
+    _ => parse_primary(s),
+  }
+}
+
+def parse_term_rest(acc: Int, cs: List[Text]) -> Result[PS, Text] = {
+  let s = skip_ws(cs);
+  match s {
+    ["*", ..rest] => {
+      let r = parse_factor(rest)?;
+      parse_term_rest(acc * r.value, r.rest)
+    },
+    ["/", ..rest] => {
+      let r = parse_factor(rest)?;
+      if r.value == 0
+      then Err("division by zero")
+      else parse_term_rest(acc / r.value, r.rest)
+    },
+    _ => Ok({value: acc, rest: s}),
+  }
+}
+
+def parse_term(cs: List[Text]) -> Result[PS, Text] = {
+  let r = parse_factor(cs)?;
+  parse_term_rest(r.value, r.rest)
+}
+
+def parse_expr_rest(acc: Int, cs: List[Text]) -> Result[PS, Text] = {
+  let s = skip_ws(cs);
+  match s {
+    ["+", ..rest] => {
+      let r = parse_term(rest)?;
+      parse_expr_rest(acc + r.value, r.rest)
+    },
+    ["-", ..rest] => {
+      let r = parse_term(rest)?;
+      parse_expr_rest(acc - r.value, r.rest)
+    },
+    _ => Ok({value: acc, rest: s}),
+  }
+}
+
+def parse_expr(cs: List[Text]) -> Result[PS, Text] = {
+  let r = parse_term(cs)?;
+  parse_expr_rest(r.value, r.rest)
+}
+
+def calc(t: Text) -> Result[Int, Text] = {
+  let r = parse_expr(chars(t))?;
+  let s = skip_ws(r.rest);
+  match s {
+    [] => Ok(r.value),
+    _ => Err("syntax error: trailing input"),
+  }
+}
+
+def is_syntax_err(r: Result[Int, Text]) -> Bool =
+  match r {
+    Err(m) => contains(m, "syntax"),
+    Ok(_) => false,
+  }
+
+def is_div_err(r: Result[Int, Text]) -> Bool =
+  match r {
+    Err(m) => contains(m, "division by zero"),
+    Ok(_) => false,
+  }
+
+test "single number" = calc("42") == Ok(42)
+test "spaces around" = calc("  7  ") == Ok(7)
+test "addition" = calc("1+2") == Ok(3)
+test "left assoc sub" = calc("10-3-2") == Ok(5)
+test "precedence" = calc("2+3*4") == Ok(14)
+test "parens" = calc("(2+3)*4") == Ok(20)
+test "nested parens" = calc("((1+2))*(3)") == Ok(9)
+test "unary minus" = calc("-5") == Ok(-5)
+test "double unary" = calc("--5") == Ok(5)
+test "unary binds tightest" = calc("-2*3") == Ok(-6)
+test "unary in expr" = calc("1 + 2 * -3") == Ok(-5)
+test "truncate toward zero" = calc("-7/2") == Ok(-3)
+test "truncate toward zero pos" = calc("7/-2") == Ok(-3)
+test "left assoc div" = calc("100/5/2") == Ok(10)
+test "div by zero" = is_div_err(calc("1/0"))
+test "div by zero expr" = is_div_err(calc("10/(3-3)"))
+test "empty input" = is_syntax_err(calc(""))
+test "only spaces" = is_syntax_err(calc("   "))
+test "dangling op" = is_syntax_err(calc("1+"))
+test "lone minus" = is_syntax_err(calc("-"))
+test "unbalanced open" = is_syntax_err(calc("(1+2"))
+test "unbalanced close" = is_syntax_err(calc("1+2)"))
+test "bad char" = is_syntax_err(calc("2^3"))
+test "two values" = is_syntax_err(calc("2 3"))
+test "trailing garbage" = is_syntax_err(calc("1+2 x"))
+test "empty parens" = is_syntax_err(calc("()"))
+
+def main(io: Io) -> Int = 0

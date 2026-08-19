@@ -1,0 +1,32 @@
+# Drop consecutive duplicate integers, keeping the first of each run.
+
+def drop_while_eq(xs: List[Int], x: Int) -> List[Int] =
+  match xs {
+    [] => [],
+    [y, ..rest] => if y == x then drop_while_eq(rest, x) else xs,
+  }
+
+def dedupe(xs: List[Int]) -> List[Int] =
+  match xs {
+    [] => [],
+    [x, ..rest] => [x] ++ dedupe(drop_while_eq(rest, x)),
+  }
+
+test "empty" = dedupe([]) == []
+test "singleton" = dedupe([1]) == [1]
+test "all same" = dedupe([1, 1, 1]) == [1]
+test "run then later repeat" = dedupe([1, 1, 2, 1]) == [1, 2, 1]
+test "no dups" = dedupe([1, 2, 3]) == [1, 2, 3]
+test "alternating runs" = dedupe([5, 5, 4, 4, 5]) == [5, 4, 5]
+test "two pairs" = dedupe([0, 0, 1, 1]) == [0, 1]
+
+test "idempotent" (xs: List[Int]) = dedupe(dedupe(xs)) == dedupe(xs)
+test "length shrinks" (xs: List[Int]) = len(dedupe(xs)) <= len(xs)
+
+test "keeps first" (xs: List[Int]) =
+  match xs {
+    [] => true,
+    [x, .._] => unwrap_or(list_get(dedupe(xs), 0), x + 1) == x,
+  }
+
+def main(io: Io) -> Int = 0

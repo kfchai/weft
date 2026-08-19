@@ -1,0 +1,6 @@
+
+test "hidden dedupe empty" = dedupe([]) == []
+test "hidden dedupe mixed" = dedupe([1, 1, 2, 1]) == [1, 2, 1]
+test "hidden dedupe all same" = dedupe([3, 3, 3]) == [3]
+test "hidden dedupe none" = dedupe([1, 2, 3]) == [1, 2, 3]
+test "hidden dedupe pairs" = dedupe([5, 5, 4, 4, 5]) == [5, 4, 5]

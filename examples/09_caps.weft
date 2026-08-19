@@ -1,0 +1,26 @@
+# Capabilities [W30-W33]: the signature is the effect statement.
+# count_words takes no capability, so it PROVABLY cannot touch the filesystem.
+
+def count_words(content: Text) -> Int =
+  len(filter(split(content, " "), (w: Text) => text_len(trim(w)) > 0))
+
+# This function's signature says: reads files, nothing else (no Io, no network-analog).
+def word_count_of_file(f: Fs, path: Text) -> Result[Int, Text] = {
+  let content = fs_read(f, path)?;
+  Ok(count_words(content))
+}
+
+# ILLEGAL variants, for contrast — each is a compile error citing [W33]:
+#   type Ctx = {f: Fs}                      # capability in a record
+#   def get_reader(io: Io) -> Fs = fs(io)   # capability in a return type
+#   (x: Int) => fs_read(f, "a.txt")         # lambda capturing a capability
+
+test "counts words" = count_words("  the  quick fox ") == 3
+
+def main(io: Io) -> Int = {
+  let f = fs(io);
+  match word_count_of_file(f, "input.txt") {
+    Ok(n) => { let _ = print(io, text_of_int(n)); 0 },
+    Err(e) => { let _ = print(io, "error: " ++ e); 1 },
+  }
+}

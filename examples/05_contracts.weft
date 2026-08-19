@@ -1,0 +1,14 @@
+# Contracts [W28]: checked on every call; a false contract halts with an
+# error citing this def. Contracts also steer property-test generation [W35].
+
+def divide(a: Int, b: Int where b != 0) -> Int = a / b
+
+# A contract may reference earlier parameters [W17].
+def slice_len(lo: Int where lo >= 0, hi: Int where hi >= lo) -> Int = hi - lo
+
+test "divide" = divide(10, 2) == 5
+
+# Property test: the runner never generates b == 0 because the contract forbids it.
+test "divide self" (b: Int where b != 0) = divide(b, b) == 1
+
+def main(io: Io) -> Int = 0

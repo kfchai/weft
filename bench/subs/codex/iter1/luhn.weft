@@ -1,0 +1,22 @@
+def luhn_scan(ds: List[Text], i: Int, total: Int, sum: Int, valid: Bool) -> Bool =
+  match ds {
+    [] => valid and sum % 10 == 0,
+    [d, ..rest] => {
+      let parsed = int_of_text(d);
+      let value = unwrap_or(parsed, -1);
+      let digit_ok = value >= 0 and value <= 9;
+      let doubled = if (total - i) % 2 == 0 then value * 2 else value;
+      let adjusted = if doubled > 9 then doubled - 9 else doubled;
+      luhn_scan(rest, i + 1, total, sum + adjusted, valid and digit_ok);
+    },
+  }
+
+def luhn(t: Text) -> Bool =
+  if text_len(t) < 2 then false else luhn_scan(chars(t), 0, text_len(t), 0, true)
+
+test "luhn valid" = luhn("4532015112830366")
+test "luhn invalid" = not luhn("4532015112830367")
+test "luhn rejects text" = not luhn("45a2015112830366")
+test "luhn append empty" (t: Text) = luhn(t) == luhn(t ++ "")
+
+def main(io: Io) -> Int = 0

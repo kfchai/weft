@@ -1,0 +1,7 @@
+
+assert mode_min([1]) == 1, "single"
+assert mode_min([1, 2, 2]) == 2, "simple"
+assert mode_min([2, 2, 1, 1]) == 1, "tie"
+assert mode_min([3, 3, 1, 1, 2]) == 1, "tie3"
+assert mode_min([5, 4, 5, 4, 4]) == 4, "late"
+print("ALL HIDDEN TESTS PASS")

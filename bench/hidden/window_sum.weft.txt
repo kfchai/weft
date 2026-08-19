@@ -1,0 +1,6 @@
+
+test "hidden window basic" = max_window_sum([1, 2, 3, 4], 2) == Some(7)
+test "hidden window empty" = max_window_sum([], 1) == None
+test "hidden window one" = max_window_sum([5], 1) == Some(5)
+test "hidden window negs" = max_window_sum([2, -1, 3], 2) == Some(2)
+test "hidden window too big" = max_window_sum([1, 2, 3], 5) == None

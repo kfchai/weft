@@ -1,0 +1,6 @@
+
+test "hidden luhn valid16" = luhn("4539148803436467") == true
+test "hidden luhn invalid16" = luhn("8273123273520569") == false
+test "hidden luhn 59" = luhn("59") == true
+test "hidden luhn single" = luhn("0") == false
+test "hidden luhn nondigit" = luhn("123a") == false

@@ -1,0 +1,47 @@
+# Roman numerals in Weft
+
+# Render one decimal digit d using the symbols for this place:
+# one = 1x, five = 5x, ten = 10x of the place value.
+def digit(d: Int where d >= 0 and d <= 9, one: Text, five: Text, ten: Text) -> Text =
+  match d {
+    0 => "",
+    1 => one,
+    2 => one ++ one,
+    3 => one ++ one ++ one,
+    4 => one ++ five,
+    5 => five,
+    6 => five ++ one,
+    7 => five ++ one ++ one,
+    8 => five ++ one ++ one ++ one,
+    _ => one ++ ten,
+  }
+
+def roman(n: Int where n >= 1 and n <= 3999) -> Text =
+  digit(n / 1000, "M", "", "")
+  ++ digit(n % 1000 / 100, "C", "D", "M")
+  ++ digit(n % 100 / 10, "X", "L", "C")
+  ++ digit(n % 10, "I", "V", "X")
+
+test "one" = roman(1) == "I"
+test "three" = roman(3) == "III"
+test "four" = roman(4) == "IV"
+test "nine" = roman(9) == "IX"
+test "fourteen" = roman(14) == "XIV"
+test "forty" = roman(40) == "XL"
+test "ninety" = roman(90) == "XC"
+test "four_hundred" = roman(400) == "CD"
+test "nine_hundred" = roman(900) == "CM"
+test "1994" = roman(1994) == "MCMXCIV"
+test "2026" = roman(2026) == "MMXXVI"
+test "3999" = roman(3999) == "MMMCMXCIX"
+test "1000" = roman(1000) == "M"
+test "nonempty" (n: Int where n >= 1 and n <= 3999) = text_len(roman(n)) >= 1
+test "no_four_repeats" (n: Int where n >= 1 and n <= 3999) =
+  not contains(roman(n), "IIII")
+  and not contains(roman(n), "XXXX")
+  and not contains(roman(n), "CCCC")
+  and not contains(roman(n), "VV")
+  and not contains(roman(n), "LL")
+  and not contains(roman(n), "DD")
+
+def main(io: Io) -> Int = 0

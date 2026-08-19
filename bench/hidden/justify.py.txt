@@ -1,0 +1,8 @@
+
+assert justify(["This", "is", "an", "example", "of", "text", "justification."], 16) == ["This    is    an", "example  of text", "justification.  "], "classic"
+assert justify(["What", "must", "be", "acknowledgment", "shall", "be"], 16) == ["What   must   be", "acknowledgment  ", "shall be        "], "single word line"
+assert justify(["a"], 3) == ["a  "], "one word"
+assert justify(["a", "b", "c", "d"], 3) == ["a b", "c d"], "exact fits"
+assert justify(["ab", "cd", "ef"], 2) == ["ab", "cd", "ef"], "tight"
+assert justify(["x", "y", "z", "world"], 5) == ["x y z", "world"], "uneven gaps"
+print("ALL HIDDEN TESTS PASS")

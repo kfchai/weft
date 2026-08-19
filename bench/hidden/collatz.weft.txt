@@ -1,0 +1,6 @@
+
+test "hidden collatz 1" = collatz_steps(1) == 0
+test "hidden collatz 2" = collatz_steps(2) == 1
+test "hidden collatz 6" = collatz_steps(6) == 8
+test "hidden collatz 7" = collatz_steps(7) == 16
+test "hidden collatz 27" = collatz_steps(27) == 111

@@ -1,0 +1,33 @@
+def take_sum(xs: List[Int], k: Int where k >= 0) -> Int =
+  if k == 0 then 0
+  else match xs {
+    [] => 0,
+    [x, ..rest] => x + take_sum(rest, k - 1),
+  }
+
+def slide(xs: List[Int], k: Int, best: Int) -> Int =
+  match xs {
+    [] => best,
+    [_, ..rest] =>
+      if len(rest) < k then best
+      else slide(rest, k, max(best, take_sum(rest, k))),
+  }
+
+def max_window_sum(xs: List[Int], k: Int where k >= 1) -> Option[Int] =
+  if len(xs) < k then None
+  else Some(slide(xs, k, take_sum(xs, k)))
+
+def main(io: Io) -> Int = 0
+
+test "basic window of two" = max_window_sum([1, 2, 3, 4], 2) == Some(7)
+test "k equals length" = max_window_sum([1, 2, 3], 3) == Some(6)
+test "too short gives none" = max_window_sum([1, 2], 3) == None
+test "empty gives none" = max_window_sum([], 1) == None
+test "k one picks max element" = max_window_sum([5, -1, 9, 2], 1) == Some(9)
+test "all negatives" = max_window_sum([-1, -2, -3], 2) == Some(-3)
+test "middle window wins" = max_window_sum([1, 9, 9, 1, 0], 2) == Some(18)
+test "none exactly when short" (xs: List[Int], k: Int where k >= 1 and k <= 8) =
+  match max_window_sum(xs, k) {
+    None => len(xs) < k,
+    Some(_) => len(xs) >= k,
+  }

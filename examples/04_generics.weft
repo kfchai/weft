@@ -1,0 +1,17 @@
+# Generic definitions [W13]. Type arguments are always inferred at call sites.
+# List patterns [W23] make recursive list code direct.
+
+def count_where[A](xs: List[A], p: (A) -> Bool) -> Int =
+  fold(xs, 0, (acc: Int, x: A) => if p(x) then acc + 1 else acc)
+
+def maximum(xs: List[Int]) -> Option[Int] =
+  match xs {
+    [] => None,
+    [x, ..rest] => Some(fold(rest, x, (acc: Int, n: Int) => max(acc, n))),
+  }
+
+test "count evens" = count_where([1, 2, 3, 4, 5, 6], (n: Int) => n % 2 == 0) == 3
+test "max of empty is None" = maximum([]) == None
+test "max picks largest" = maximum([3, 9, 4]) == Some(9)
+
+def main(io: Io) -> Int = 0

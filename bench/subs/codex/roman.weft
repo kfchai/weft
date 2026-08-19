@@ -1,0 +1,22 @@
+def repeat_text(s: Text, n: Int) -> Text =
+  if n <= 0 then "" else s ++ repeat_text(s, n - 1)
+
+def roman_under_ten(n: Int, one: Text, five: Text, ten: Text) -> Text =
+  if n == 0 then ""
+  else if n <= 3 then repeat_text(one, n)
+  else if n == 4 then one ++ five
+  else if n <= 8 then five ++ repeat_text(one, n - 5)
+  else one ++ ten
+
+def roman(n: Int where n >= 1 and n <= 3999) -> Text =
+  repeat_text("M", n / 1000)
+    ++ roman_under_ten((n / 100) % 10, "C", "D", "M")
+    ++ roman_under_ten((n / 10) % 10, "X", "L", "C")
+    ++ roman_under_ten(n % 10, "I", "V", "X")
+
+test "roman four" = roman(4) == "IV"
+test "roman forty" = roman(40) == "XL"
+test "roman 1994" = roman(1994) == "MCMXCIV"
+test "roman nonempty" (n: Int where n >= 1 and n <= 3999) = text_len(roman(n)) > 0
+
+def main(io: Io) -> Int = 0

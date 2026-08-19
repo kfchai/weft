@@ -1,0 +1,69 @@
+def spaces(n: Int) -> Text =
+  if n <= 0 then "" else " " ++ spaces(n - 1)
+
+def pad_right(t: Text, width: Int) -> Text =
+  t ++ spaces(width - text_len(t))
+
+# Greedily pack words into groups (lines), each fitting within width.
+def pack(ws: List[Text], width: Int, cur: List[Text], cur_len: Int) -> List[List[Text]] =
+  match ws {
+    [] => if len(cur) == 0 then [] else [cur],
+    [w, ..rest] =>
+      if len(cur) == 0 then
+        pack(rest, width, [w], text_len(w))
+      else if cur_len + 1 + text_len(w) <= width then
+        pack(rest, width, append(cur, w), cur_len + 1 + text_len(w))
+      else
+        [cur] ++ pack(rest, width, [w], text_len(w)),
+  }
+
+# Join words placing base spaces in each gap, plus one extra space in the
+# leftmost `extra` gaps.
+def build(ws: List[Text], base: Int, extra: Int) -> Text =
+  match ws {
+    [] => "",
+    [w, ..rest] =>
+      if len(rest) == 0 then w
+      else w ++ spaces(base + (if extra > 0 then 1 else 0)) ++ build(rest, base, extra - 1),
+  }
+
+def sum_len(ws: List[Text]) -> Int =
+  fold(ws, 0, (acc: Int, w: Text) => acc + text_len(w))
+
+def full_line(ws: List[Text], width: Int) -> Text =
+  if len(ws) == 1 then
+    pad_right(join(ws, " "), width)
+  else {
+    let gaps = len(ws) - 1;
+    let total = width - sum_len(ws);
+    build(ws, total / gaps, total % gaps)
+  }
+
+def render(groups: List[List[Text]], width: Int) -> List[Text] =
+  match groups {
+    [] => [],
+    [g, ..rest] =>
+      if len(rest) == 0 then [pad_right(join(g, " "), width)]
+      else [full_line(g, width)] ++ render(rest, width),
+  }
+
+def justify(words: List[Text], width: Int where width >= 1) -> List[Text] =
+  render(pack(words, width, [], 0), width)
+
+def main(io: Io) -> Int = 0
+
+test "classic example" =
+  justify(["This", "is", "an", "example", "of", "text", "justification."], 16)
+    == ["This    is    an", "example  of text", "justification.  "]
+
+test "single word padded right" =
+  justify(["a"], 3) == ["a  "]
+
+test "single line is last line" =
+  justify(["hello", "world"], 12) == ["hello world "]
+
+test "extra spaces go left" =
+  justify(["a", "b", "c", "dddddd"], 6) == ["a  b c", "dddddd"]
+
+test "exact fit line" =
+  justify(["ab", "cd"], 5) == ["ab cd"]

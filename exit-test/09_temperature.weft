@@ -1,0 +1,90 @@
+# EXIT-TEST submission — task: temperature — verdict: PASS (no spec violations)
+# The Int/Float trap was the point of this task: agent kept all arithmetic
+# Float-only and converted len() explicitly with int_to_float [W15/W25].
+
+type Reading = {day: Text, celsius: Float}
+
+# (a) Name of the warmest day; None for an empty list.
+# On ties the earliest such day wins (strict > keeps the first seen).
+def warmest_day(readings: List[Reading]) -> Option[Text] =
+  match readings {
+    [] => None,
+    [first, ..rest] => {
+      let best = fold(rest, first, (b: Reading, r: Reading) =>
+        if r.celsius > b.celsius then r else b);
+      Some(best.day)
+    },
+  }
+
+# (b) Average temperature as a Float. Arithmetic never mixes Int and
+# Float, so the Int length is converted explicitly. Empty list -> 0.0.
+def average(readings: List[Reading]) -> Float =
+  if len(readings) == 0 then 0.0 else {
+    let total = fold(readings, 0.0, (acc: Float, r: Reading) => acc + r.celsius);
+    total / int_to_float(len(readings))
+  }
+
+# (c) Names of days whose temperature is strictly above the average.
+def above_average(readings: List[Reading]) -> List[Text] = {
+  let avg = average(readings);
+  let warm = filter(readings, (r: Reading) => r.celsius > avg);
+  map(warm, (r: Reading) => r.day)
+}
+
+# Sample data ---------------------------------------------------------
+
+def sample_week: List[Reading] = [
+  {day: "Mon", celsius: 18.5},
+  {day: "Tue", celsius: 21.0},
+  {day: "Wed", celsius: 26.5},
+  {day: "Thu", celsius: 24.0},
+  {day: "Fri", celsius: 19.5},
+  {day: "Sat", celsius: 22.0},
+  {day: "Sun", celsius: 17.5},
+]
+
+def trio: List[Reading] = [
+  {day: "A", celsius: 10.0},
+  {day: "B", celsius: 20.0},
+  {day: "C", celsius: 30.0},
+]
+
+# Tests ---------------------------------------------------------------
+
+test "warmest of empty list is None" =
+  warmest_day([]) == None
+
+test "warmest day of sample week is Wed" =
+  warmest_day(sample_week) == Some("Wed")
+
+test "warmest keeps first day on a tie" =
+  warmest_day([{day: "X", celsius: 5.0}, {day: "Y", celsius: 5.0}]) == Some("X")
+
+test "average of empty list is 0.0" =
+  average([]) == 0.0
+
+test "average of trio is 20.0" =
+  average(trio) == 20.0
+
+test "average of single reading is itself" =
+  average([{day: "Solo", celsius: 12.5}]) == 12.5
+
+test "above average of empty list is empty" =
+  above_average([]) == []
+
+test "above average of trio is strictly above" =
+  above_average(trio) == ["C"]
+
+test "equal readings are never strictly above their average" =
+  above_average([{day: "P", celsius: 7.0}, {day: "Q", celsius: 7.0}]) == []
+
+# Entry point ---------------------------------------------------------
+
+def main(io: Io) -> Int = {
+  let message = match warmest_day(sample_week) {
+    Some(d) => "Warmest day: " ++ d,
+    None => "No readings",
+  };
+  let _ = print(io, message);
+  0
+}

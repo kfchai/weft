@@ -1,0 +1,12 @@
+
+test "h classic" =
+  justify(["This", "is", "an", "example", "of", "text", "justification."], 16)
+    == ["This    is    an", "example  of text", "justification.  "]
+test "h single word line pads right" =
+  justify(["What", "must", "be", "acknowledgment", "shall", "be"], 16)
+    == ["What   must   be", "acknowledgment  ", "shall be        "]
+test "h one word" = justify(["a"], 3) == ["a  "]
+test "h exact fits" = justify(["a", "b", "c", "d"], 3) == ["a b", "c d"]
+test "h tight" = justify(["ab", "cd", "ef"], 2) == ["ab", "cd", "ef"]
+test "h uneven gaps go left" =
+  justify(["x", "y", "z", "world"], 5) == ["x y z", "world"]

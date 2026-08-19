@@ -1,0 +1,30 @@
+def count_of(xs: List[Int], v: Int) -> Int =
+  len(filter(xs, (x: Int) => x == v))
+
+def mode_min(xs: List[Int] where len(xs) > 0) -> Int =
+  match xs {
+    [] => 0,
+    [h, .._] =>
+      fold(xs, h, (best: Int, x: Int) => {
+        let cb = count_of(xs, best);
+        let cx = count_of(xs, x);
+        if cx > cb or (cx == cb and x < best) then x else best
+      }),
+  }
+
+def main(io: Io) -> Int = 0
+
+test "single element" = mode_min([5]) == 5
+test "simple mode" = mode_min([1, 2, 2, 3]) == 2
+test "tie returns smallest" = mode_min([3, 3, 1, 1, 2]) == 1
+test "all distinct returns smallest" = mode_min([4, 2, 9]) == 2
+test "mode at end" = mode_min([1, 2, 3, 3, 3]) == 3
+test "negative values" = mode_min([-1, -1, 2]) == -1
+test "member" (xs: List[Int] where len(xs) > 0) =
+  len(filter(xs, (x: Int) => x == mode_min(xs))) > 0
+test "is a maximal count" (xs: List[Int] where len(xs) > 0) =
+  fold(xs, true, (acc: Bool, x: Int) =>
+    acc and count_of(xs, x) <= count_of(xs, mode_min(xs)))
+test "smallest among tied" (xs: List[Int] where len(xs) > 0) =
+  fold(xs, true, (acc: Bool, x: Int) =>
+    acc and (count_of(xs, x) < count_of(xs, mode_min(xs)) or mode_min(xs) <= x))

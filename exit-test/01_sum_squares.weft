@@ -1,0 +1,29 @@
+# EXIT-TEST submission — task: sum-squares — verdict: PASS (no spec violations)
+# Model saw SPEC.md only.
+
+def sum_squares(n: Int where n >= 0) -> Int =
+  if n == 0 then 0 else n * n + sum_squares(n - 1)
+
+# Independent fold-based formulation for cross-checking.
+def sum_squares_fold(n: Int where n >= 0) -> Int =
+  fold(range(1, n + 1), 0, (acc: Int, x: Int) => acc + x * x)
+
+# Property test: both formulations agree. The contract bounds the
+# generated inputs to non-negative (and modest) values.
+test "sum_squares matches fold formulation" (n: Int where n >= 0 and n <= 500) =
+  sum_squares(n) == sum_squares_fold(n)
+
+# Unit tests.
+test "sum_squares of zero is zero" =
+  sum_squares(0) == 0
+
+test "sum_squares of five is fifty-five" =
+  sum_squares(5) == 55
+
+test "sum_squares of ten is 385" =
+  sum_squares(10) == 385
+
+def main(io: Io) -> Int = {
+  let _ = print(io, "sum_squares(10) = " ++ text_of_int(sum_squares(10)));
+  0
+}

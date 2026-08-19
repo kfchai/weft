@@ -1,0 +1,22 @@
+# Holes [W27]: this file TYPECHECKS but is not finished. The checker reports
+# each hole with its expected type, e.g.
+#   {rule: "W27", message: "hole ?score_of", expected: "(Text) -> Int", ...}
+# This is the intended workflow: scaffold, check, fill holes one by one.
+
+type Grade = A | B | C | Fail
+
+def score_of(name: Text) -> Int = ?score_of
+
+def grade(score: Int where score >= 0 and score <= 100) -> Grade =
+  if score >= 90 then A
+  else if score >= 80 then B
+  else if score >= 70 then C
+  else Fail
+
+# Tests can be written before the holes are filled — they run once holes are gone.
+test "boundaries" = grade(90) == A and grade(89) == B and grade(69) == Fail
+
+def main(io: Io) -> Int = {
+  let _ = print(io, ?report_line);
+  0
+}

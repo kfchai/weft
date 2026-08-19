@@ -1,0 +1,96 @@
+# EXIT-TEST submission — task: todo-machine — verdict: PASS (no spec violations)
+# Agent noticed stdlib `contains` is Text-only and hand-rolled list membership
+# via fold — third task to rebuild list search (see open questions in EXIT-TEST.md).
+
+type Cmd = Add(Text) | Done(Text) | Remove(Text)
+
+type State = {pending: List[Text], completed: List[Text]}
+
+def empty: State = {pending: [], completed: []}
+
+# True when x is an element of xs.
+def has(xs: List[Text], x: Text) -> Bool =
+  fold(xs, false, (acc: Bool, item: Text) => acc or item == x)
+
+# xs with every occurrence of x removed.
+def without(xs: List[Text], x: Text) -> List[Text] =
+  filter(xs, (item: Text) => item != x)
+
+def step(state: State, cmd: Cmd) -> Result[State, Text] =
+  match cmd {
+    Add(item) =>
+      if has(state.pending, item) or has(state.completed, item)
+      then Err("already exists: " ++ item)
+      else Ok({..state, pending: append(state.pending, item)}),
+    Done(item) =>
+      if has(state.pending, item)
+      then Ok({pending: without(state.pending, item), completed: append(state.completed, item)})
+      else Err("not pending: " ++ item),
+    Remove(item) =>
+      if has(state.pending, item)
+      then Ok({..state, pending: without(state.pending, item)})
+      else if has(state.completed, item)
+      then Ok({..state, completed: without(state.completed, item)})
+      else Err("not found: " ++ item),
+  }
+
+# Fold a list of commands from an initial state, stopping at the first error.
+def run(state: State, cmds: List[Cmd]) -> Result[State, Text] =
+  match cmds {
+    [] => Ok(state),
+    [c, ..rest] => {
+      let next = step(state, c)?;
+      run(next, rest)
+    },
+  }
+
+# --- Legal transitions ---
+
+test "add inserts a new pending item" =
+  step(empty, Add("a")) == Ok({pending: ["a"], completed: []})
+
+test "done moves a pending item to completed" =
+  step({pending: ["a"], completed: []}, Done("a")) == Ok({pending: [], completed: ["a"]})
+
+test "remove deletes a pending item" =
+  step({pending: ["a", "b"], completed: []}, Remove("a")) == Ok({pending: ["b"], completed: []})
+
+test "remove deletes a completed item" =
+  step({pending: [], completed: ["a"]}, Remove("a")) == Ok({pending: [], completed: []})
+
+# --- Illegal transitions ---
+
+test "add fails when item is already pending" =
+  step({pending: ["a"], completed: []}, Add("a")) == Err("already exists: a")
+
+test "add fails when item is already completed" =
+  step({pending: [], completed: ["a"]}, Add("a")) == Err("already exists: a")
+
+test "done fails when item is not pending" =
+  step(empty, Done("ghost")) == Err("not pending: ghost")
+
+test "remove fails when item exists nowhere" =
+  step({pending: ["a"], completed: ["b"]}, Remove("c")) == Err("not found: c")
+
+# --- Folding a command list ---
+
+test "run applies commands in order" =
+  run(empty, [Add("a"), Add("b"), Done("a")]) == Ok({pending: ["b"], completed: ["a"]})
+
+test "run stops at the first error" =
+  run(empty, [Add("a"), Done("b"), Add("c")]) == Err("not pending: b")
+
+def main(io: Io) -> Int = {
+  let outcome = run(empty, [Add("write spec"), Add("read spec"), Done("write spec")]);
+  match outcome {
+    Ok(s) => {
+      let _ = print(io, "pending: " ++ join(s.pending, ", "));
+      let _ = print(io, "completed: " ++ join(s.completed, ", "));
+      0
+    },
+    Err(e) => {
+      let _ = print(io, "error: " ++ e);
+      1
+    },
+  }
+}

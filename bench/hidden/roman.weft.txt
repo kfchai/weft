@@ -1,0 +1,7 @@
+
+test "hidden roman 1" = roman(1) == "I"
+test "hidden roman 4" = roman(4) == "IV"
+test "hidden roman 14" = roman(14) == "XIV"
+test "hidden roman 90" = roman(90) == "XC"
+test "hidden roman 1990" = roman(1990) == "MCMXC"
+test "hidden roman 3999" = roman(3999) == "MMMCMXCIX"

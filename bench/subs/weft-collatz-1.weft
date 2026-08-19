@@ -1,0 +1,15 @@
+def collatz_steps(n: Int where n >= 1) -> Int =
+  if n == 1 then 0
+  else if n % 2 == 0 then 1 + collatz_steps(n / 2)
+  else 1 + collatz_steps(3 * n + 1)
+
+def main(io: Io) -> Int = 0
+
+test "one takes zero steps" = collatz_steps(1) == 0
+test "two takes one step" = collatz_steps(2) == 1
+test "three takes seven steps" = collatz_steps(3) == 7
+test "six takes eight steps" = collatz_steps(6) == 8
+test "seven takes sixteen steps" = collatz_steps(7) == 16
+test "twenty seven takes 111 steps" = collatz_steps(27) == 111
+test "steps positive for n above one" (n: Int where n >= 2 and n <= 10000) =
+  collatz_steps(n) >= 1

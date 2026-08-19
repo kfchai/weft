@@ -1,0 +1,22 @@
+# Result and the ? propagation operator [W26].
+# ? unwraps Ok, or returns the Err from the enclosing function.
+
+type Pair = {fst: Int, snd: Int}
+
+def parse_pair(t: Text) -> Result[Pair, Text] = {
+  let parts = split(t, ",");
+  match parts {
+    [a, b] => {
+      let x = ok_or(int_of_text(trim(a)), "bad first number")?;
+      let y = ok_or(int_of_text(trim(b)), "bad second number")?;
+      Ok({fst: x, snd: y})
+    },
+    _ => Err("expected exactly one comma"),
+  }
+}
+
+test "parses" = parse_pair("3, 4") == Ok({fst: 3, snd: 4})
+test "reports bad int" = parse_pair("3, x") == Err("bad second number")
+test "reports shape" = parse_pair("3") == Err("expected exactly one comma")
+
+def main(io: Io) -> Int = 0

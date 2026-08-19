@@ -1,0 +1,26 @@
+def count_value(xs: List[Int], value: Int) -> Int =
+  match xs {
+    [] => 0,
+    [x, ..rest] => (if x == value then 1 else 0) + count_value(rest, value),
+  }
+
+def mode_scan(xs: List[Int], all: List[Int], best: Int, best_count: Int) -> Int =
+  match xs {
+    [] => best,
+    [x, ..rest] => {
+      let current_count = count_value(all, x);
+      let replace = current_count > best_count or (current_count == best_count and x < best);
+      mode_scan(rest, all, if replace then x else best, if replace then current_count else best_count);
+    },
+  }
+
+def mode_min(xs: List[Int] where len(xs) > 0) -> Int =
+  match xs {
+    [x, ..rest] => mode_scan(rest, xs, x, count_value(xs, x)),
+  }
+
+test "mode tie smallest" = mode_min([4, 1, 4, 1, 2]) == 1
+test "mode repeated" = mode_min([3, 3, 2, 1, 3]) == 3
+test "mode present" (xs: List[Int] where len(xs) > 0) = index_of(xs, mode_min(xs)) != None
+
+def main(io: Io) -> Int = 0

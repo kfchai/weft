@@ -1,0 +1,41 @@
+# EXIT-TEST submission — task: caesar — verdict: PASS (no spec violations)
+# Observation: stdlib has no char<->index or find-in-list function; agent built
+# index_of from fold+zip. Correct, but a `index_of` / `find` stdlib fn would help.
+
+def alphabet: List[Text] = chars("abcdefghijklmnopqrstuvwxyz")
+
+# Index of a character in the alphabet, or -1 if it is not a lowercase letter.
+def index_of(c: Text) -> Int =
+  fold(zip(alphabet, range(0, 26)), -1, (acc, p) => if p.fst == c then p.snd else acc)
+
+# Shift a single character forward by n positions (n already normalized to 0..25).
+# Non-letters pass through unchanged.
+def shift_char(c: Text, n: Int) -> Text = {
+  let i = index_of(c);
+  if i < 0 then c else unwrap_or(list_get(alphabet, (i + n) % 26), c)
+}
+
+def encode(t: Text, k: Int where k >= 0 and k <= 25) -> Text =
+  join(map(chars(t), (c) => shift_char(c, k)), "")
+
+def decode(t: Text, k: Int where k >= 0 and k <= 25) -> Text =
+  join(map(chars(t), (c) => shift_char(c, (26 - k) % 26)), "")
+
+test "encode shifts by 3" = encode("abc", 3) == "def"
+
+test "decode undoes shift of 3" = decode("def", 3) == "abc"
+
+test "encode wraps around z" = encode("xyz", 3) == "abc"
+
+test "non-letters pass through" = encode("a b!", 1) == "b c!"
+
+test "identity at shift 0" = encode("hello", 0) == "hello"
+
+test "decode inverts encode" (t: Text, k: Int where k >= 0 and k <= 25) =
+  decode(encode(t, k), k) == t
+
+def main(io: Io) -> Int = {
+  let _ = print(io, encode("hello, world", 3));
+  let _ = print(io, decode(encode("hello, world", 3), 3));
+  0
+}

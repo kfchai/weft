@@ -1,0 +1,49 @@
+# Standard subtractive Roman numerals for 1..=3999.
+
+def roman_apply(n: Int, vals: List[Int], syms: List[Text]) -> Text =
+  match vals {
+    [] => "",
+    [v, ..vs] => match syms {
+      [] => "",
+      [s, ..ss] =>
+        if n >= v then s ++ roman_apply(n - v, vals, syms)
+        else roman_apply(n, vs, ss),
+    },
+  }
+
+def roman(n: Int where n >= 1 and n <= 3999) -> Text =
+  roman_apply(
+    n,
+    [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1],
+    ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
+  )
+
+test "one" = roman(1) == "I"
+test "two" = roman(2) == "II"
+test "three" = roman(3) == "III"
+test "four" = roman(4) == "IV"
+test "five" = roman(5) == "V"
+test "six" = roman(6) == "VI"
+test "nine" = roman(9) == "IX"
+test "ten" = roman(10) == "X"
+test "fourteen" = roman(14) == "XIV"
+test "forty" = roman(40) == "XL"
+test "forty four" = roman(44) == "XLIV"
+test "forty nine" = roman(49) == "XLIX"
+test "fifty" = roman(50) == "L"
+test "fifty eight" = roman(58) == "LVIII"
+test "ninety" = roman(90) == "XC"
+test "hundred" = roman(100) == "C"
+test "four hundred" = roman(400) == "CD"
+test "five hundred" = roman(500) == "D"
+test "nine hundred" = roman(900) == "CM"
+test "thousand" = roman(1000) == "M"
+test "nineteen ninety four" = roman(1994) == "MCMXCIV"
+test "sixteen sixty six" = roman(1666) == "MDCLXVI"
+test "two thousand twenty four" = roman(2024) == "MMXXIV"
+test "max" = roman(3999) == "MMMCMXCIX"
+test "nine hundred forty four" = roman(944) == "CMXLIV"
+
+test "nonempty" (n: Int where n >= 1 and n <= 3999) = text_len(roman(n)) > 0
+
+def main(io: Io) -> Int = 0

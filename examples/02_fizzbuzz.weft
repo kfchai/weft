@@ -1,0 +1,16 @@
+# Iteration is recursion or stdlib folds [W39]. This uses map + fold.
+
+def fizz(n: Int) -> Text =
+  if n % 15 == 0 then "fizzbuzz"
+  else if n % 3 == 0 then "fizz"
+  else if n % 5 == 0 then "buzz"
+  else text_of_int(n)
+
+test "multiples of both" = fizz(30) == "fizzbuzz"
+test "plain numbers pass through" = fizz(7) == "7"
+
+def main(io: Io) -> Int = {
+  let lines = map(range(1, 101), fizz);
+  let _ = print(io, join(lines, "\n"));
+  0
+}

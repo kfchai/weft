@@ -1,0 +1,7 @@
+
+assert collatz_steps(1) == 0, "collatz_steps(1)"
+assert collatz_steps(2) == 1, "collatz_steps(2)"
+assert collatz_steps(6) == 8, "collatz_steps(6)"
+assert collatz_steps(7) == 16, "collatz_steps(7)"
+assert collatz_steps(27) == 111, "collatz_steps(27)"
+print("ALL HIDDEN TESTS PASS")

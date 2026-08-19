@@ -1,0 +1,17 @@
+def dedupe_after(xs: List[Int], previous: Int) -> List[Int] =
+  match xs {
+    [] => [],
+    [x, ..rest] => if x == previous then dedupe_after(rest, previous) else [x] ++ dedupe_after(rest, x),
+  }
+
+def dedupe(xs: List[Int]) -> List[Int] =
+  match xs {
+    [] => [],
+    [x, ..rest] => [x] ++ dedupe_after(rest, x),
+  }
+
+test "dedupe runs" = dedupe([1, 1, 2, 1]) == [1, 2, 1]
+test "dedupe empty" = dedupe([]) == []
+test "dedupe idempotent" (xs: List[Int]) = dedupe(dedupe(xs)) == dedupe(xs)
+
+def main(io: Io) -> Int = 0

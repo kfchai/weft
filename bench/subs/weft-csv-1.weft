@@ -1,0 +1,71 @@
+# CSV parser in Weft.
+# States: field start, inside unquoted field, inside quoted field.
+
+def csv_start(cs: List[Text], row: List[Text], rows: List[List[Text]]) -> Result[List[List[Text]], Text] =
+  match cs {
+    [] => Ok(append(rows, append(row, ""))),
+    ["\"", ..rest] => csv_quoted(rest, "", row, rows),
+    [",", ..rest] => csv_start(rest, append(row, ""), rows),
+    ["\n", ..rest] => csv_start(rest, [], append(rows, append(row, ""))),
+    [c, ..rest] => csv_unquoted(rest, c, row, rows),
+  }
+
+def csv_unquoted(cs: List[Text], field: Text, row: List[Text], rows: List[List[Text]]) -> Result[List[List[Text]], Text] =
+  match cs {
+    [] => Ok(append(rows, append(row, field))),
+    ["\"", .._] => Err("unexpected quote inside unquoted field"),
+    [",", ..rest] => csv_start(rest, append(row, field), rows),
+    ["\n", ..rest] => csv_start(rest, [], append(rows, append(row, field))),
+    [c, ..rest] => csv_unquoted(rest, field ++ c, row, rows),
+  }
+
+def csv_quoted(cs: List[Text], field: Text, row: List[Text], rows: List[List[Text]]) -> Result[List[List[Text]], Text] =
+  match cs {
+    [] => Err("unterminated quote in quoted field"),
+    ["\"", ..rest] =>
+      match rest {
+        [] => Ok(append(rows, append(row, field))),
+        ["\"", ..rest2] => csv_quoted(rest2, field ++ "\"", row, rows),
+        [",", ..rest2] => csv_start(rest2, append(row, field), rows),
+        ["\n", ..rest2] => csv_start(rest2, [], append(rows, append(row, field))),
+        [_, .._] => Err("closing quote must be followed by comma, newline, or end of input"),
+      },
+    [c, ..rest] => csv_quoted(rest, field ++ c, row, rows),
+  }
+
+def parse_csv(t: Text) -> Result[List[List[Text]], Text] = {
+  let cs = chars(t);
+  # A single trailing newline at the end of input is ignored.
+  let stripped = match reverse(cs) {
+    ["\n", ..rest] => reverse(rest),
+    _ => cs,
+  };
+  match stripped {
+    [] => Ok([]),
+    _ => csv_start(stripped, [], []),
+  }
+}
+
+def is_quote_err(r: Result[List[List[Text]], Text]) -> Bool =
+  match r {
+    Err(m) => contains(m, "quote"),
+    _ => false,
+  }
+
+test "empty input gives zero rows" = parse_csv("") == Ok([])
+test "single trailing newline ignored" = parse_csv("a,b\n") == Ok([["a", "b"]])
+test "simple grid" = parse_csv("a,b\nc,d") == Ok([["a", "b"], ["c", "d"]])
+test "empty fields allowed" = parse_csv("a,,b") == Ok([["a", "", "b"]])
+test "trailing comma makes empty field" = parse_csv("a,") == Ok([["a", ""]])
+test "quoted comma is literal" = parse_csv("\"a,b\",c") == Ok([["a,b", "c"]])
+test "quoted newline is literal" = parse_csv("\"a\nb\",c") == Ok([["a\nb", "c"]])
+test "doubled quote is one literal quote" = parse_csv("\"a\"\"b\"") == Ok([["a\"b"]])
+test "empty quoted field" = parse_csv("\"\"") == Ok([[""]])
+test "quoted field then newline" = parse_csv("\"x\"\ny") == Ok([["x"], ["y"]])
+test "only one trailing newline ignored" = parse_csv("a\n\n") == Ok([["a"], [""]])
+test "quote in middle of field errs" = is_quote_err(parse_csv("a\"b"))
+test "unterminated quoted field errs" = is_quote_err(parse_csv("\"ab"))
+test "junk after closing quote errs" = is_quote_err(parse_csv("\"a\"b"))
+test "quote after data errs even at row end" = is_quote_err(parse_csv("x,a\"\ny"))
+
+def main(io: Io) -> Int = 0

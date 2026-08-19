@@ -1,0 +1,29 @@
+
+test "h fee applied below threshold" =
+  match price_cart([{sku: "TEA-001", qty: 1}], []) {
+    Ok(p) => p.total == 1750,
+    Err(_) => false,
+  }
+test "h fee applied near boundary below" =
+  match price_cart([{sku: "HNY-001", qty: 33}], []) {
+    Ok(p) => p.total == 30283,
+    Err(_) => false,
+  }
+test "h fee waived near boundary above" =
+  match price_cart([{sku: "HNY-001", qty: 34}], []) {
+    Ok(p) => p.total == 30685,
+    Err(_) => false,
+  }
+test "h fee waived well above" =
+  match price_cart([{sku: "KTL-001", qty: 4}], []) {
+    Ok(p) => p.total == 33820,
+    Err(_) => false,
+  }
+test "h receipt shows shipping fee" = {
+  let r = receipt(new_order(901, [{sku: "TEA-001", qty: 1}]), []);
+  contains(r, "hipping") and contains(r, "$5.00")
+}
+test "h receipt shows waived shipping" = {
+  let r = receipt(new_order(902, [{sku: "HNY-001", qty: 34}]), []);
+  contains(r, "hipping") and not contains(r, "$5.00")
+}

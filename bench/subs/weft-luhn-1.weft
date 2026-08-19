@@ -1,0 +1,32 @@
+# Luhn checksum validation in Weft
+
+def digit_of(c: Text) -> Int =
+  unwrap_or(int_of_text(c), -1)
+
+def luhn_term(d: Int, pos: Int) -> Int =
+  if pos % 2 == 1 then {
+    let x = d * 2;
+    if x > 9 then x - 9 else x
+  } else d
+
+def luhn(t: Text) -> Bool = {
+  let ds = map(chars(t), (c: Text) => digit_of(c));
+  let all_digits = fold(ds, true, (acc: Bool, d: Int) => acc and d >= 0);
+  let pairs = zip(reverse(ds), range(0, len(ds)));
+  let total = fold(pairs, 0, (acc: Int, p: {fst: Int, snd: Int}) => acc + luhn_term(p.fst, p.snd));
+  len(ds) >= 2 and all_digits and total % 10 == 0
+}
+
+test "valid classic number" = luhn("79927398713")
+test "invalid checksum" = not luhn("79927398714")
+test "valid short" = luhn("18")
+test "valid with leading zero" = luhn("059")
+test "invalid short checksum" = not luhn("19")
+test "too short single digit" = not luhn("0")
+test "empty text invalid" = not luhn("")
+test "non-digit rejected" = not luhn("7992739871a")
+test "sign character rejected" = not luhn("-9927398713")
+test "space rejected" = not luhn("79927 398713")
+test "all zeros valid" = luhn("00")
+
+def main(io: Io) -> Int = 0

@@ -1,0 +1,5 @@
+# Rust build artifacts
+/weftc/target/
+
+# Generated benchmark work files (submission + hidden tests merged at grading time)
+/bench/work/

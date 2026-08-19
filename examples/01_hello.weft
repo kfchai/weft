@@ -1,0 +1,7 @@
+# Smallest complete program. main receives the root capability [W8]
+# and returns an exit code.
+
+def main(io: Io) -> Int = {
+  let _ = print(io, "hello, weft");
+  0
+}

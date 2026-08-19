@@ -1,0 +1,46 @@
+# Most frequent value; ties break toward the smaller value.
+
+def count_eq(xs: List[Int], x: Int) -> Int =
+  len(filter(xs, (y: Int) => y == x))
+
+def mode_scan(xs: List[Int], remaining: List[Int], best: Int, best_c: Int) -> Int =
+  match remaining {
+    [] => best,
+    [x, ..rest] => {
+      let c = count_eq(xs, x);
+      if c > best_c then mode_scan(xs, rest, x, c)
+      else if c == best_c and x < best then mode_scan(xs, rest, x, c)
+      else mode_scan(xs, rest, best, best_c)
+    },
+  }
+
+def mode_min(xs: List[Int] where len(xs) > 0) -> Int =
+  mode_scan(xs, xs, unwrap_or(list_get(xs, 0), 0), 0)
+
+test "singleton" = mode_min([1]) == 1
+test "clear winner" = mode_min([1, 2, 2]) == 2
+test "tie takes smaller" = mode_min([1, 1, 2, 2]) == 1
+test "tie reverse order" = mode_min([2, 2, 1, 1]) == 1
+test "three way" = mode_min([3, 2, 1]) == 1
+test "one wins" = mode_min([3, 2, 1, 2, 1, 1]) == 1
+test "tie three and five" = mode_min([5, 5, 3, 3, 3, 5]) == 3
+test "negatives" = mode_min([-1, -1, 0]) == -1
+test "all equal" = mode_min([7, 7, 7]) == 7
+test "zero" = mode_min([0, 1, 0]) == 0
+
+test "result in list" (xs: List[Int] where len(xs) > 0) =
+  match index_of(xs, mode_min(xs)) {
+    Some(_) => true,
+    None => false,
+  }
+
+test "most frequent and min tie" (xs: List[Int] where len(xs) > 0) = {
+  let m = mode_min(xs);
+  let cm = count_eq(xs, m);
+  fold(xs, true, (ok: Bool, x: Int) => {
+    let c = count_eq(xs, x);
+    ok and c <= cm and (if c == cm then m <= x else true)
+  })
+}
+
+def main(io: Io) -> Int = 0

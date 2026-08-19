@@ -1,0 +1,64 @@
+# EXIT-TEST submission — task: binary-search — verdict: PASS (no spec violations)
+# Half-open [lo, hi) recursion; property test sorts generated input via
+# identity sort_by key and validates duplicate-tolerant agreement.
+
+def bsearch_go(xs: List[Int], target: Int, lo: Int, hi: Int) -> Option[Int] =
+  if lo >= hi then None
+  else {
+    let mid = lo + (hi - lo) / 2;
+    match list_get(xs, mid) {
+      None => None,
+      Some(v) =>
+        if v == target then Some(mid)
+        else if v < target then bsearch_go(xs, target, mid + 1, hi)
+        else bsearch_go(xs, target, lo, mid),
+    }
+  }
+
+def bsearch(xs: List[Int], target: Int) -> Option[Int] =
+  bsearch_go(xs, target, 0, len(xs))
+
+# Independent linear search built from list recursion.
+
+def lsearch_go(xs: List[Int], target: Int, i: Int) -> Option[Int] =
+  match xs {
+    [] => None,
+    [x, ..rest] =>
+      if x == target then Some(i)
+      else lsearch_go(rest, target, i + 1),
+  }
+
+def lsearch(xs: List[Int], target: Int) -> Option[Int] =
+  lsearch_go(xs, target, 0)
+
+# Property test: on sorted input, bsearch finds target exactly when linear
+# search does, and any index it returns actually holds the target
+# (any matching index is acceptable for duplicates).
+
+test "bsearch agrees with linear search on sorted input" (raw: List[Int], target: Int) = {
+  let xs = sort_by(raw, (x: Int) => x);
+  match bsearch(xs, target) {
+    None => match lsearch(xs, target) {
+      None => true,
+      Some(_) => false,
+    },
+    Some(i) => list_get(xs, i) == Some(target),
+  }
+}
+
+# Unit tests
+
+test "found at first index" = bsearch([1, 2, 3, 4, 5], 1) == Some(0)
+test "found at last index" = bsearch([1, 2, 3, 4, 5], 5) == Some(4)
+test "absent from non-empty list" = bsearch([1, 3, 5, 7], 4) == None
+test "empty list" = bsearch([], 42) == None
+
+def main(io: Io) -> Int = {
+  let xs = [1, 3, 5, 7, 9];
+  let msg = match bsearch(xs, 7) {
+    Some(i) => "found 7 at index " ++ text_of_int(i),
+    None => "7 not found",
+  };
+  let _ = print(io, msg);
+  0
+}

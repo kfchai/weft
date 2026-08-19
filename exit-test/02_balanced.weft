@@ -1,0 +1,53 @@
+# EXIT-TEST submission — task: balanced — verdict: PASS (no spec violations)
+# Observations: spec doesn't say what may follow `..` in a list pattern (agent
+# wrote `[_, .._rest]`); stdlib has no text_of_bool (agent worked around with if).
+
+def is_open(c: Text) -> Bool =
+  c == "(" or c == "[" or c == "{"
+
+def is_close(c: Text) -> Bool =
+  c == ")" or c == "]" or c == "}"
+
+# The opening bracket that matches a given closing bracket.
+def opener_of(c: Text where is_close(c)) -> Text =
+  if c == ")" then "("
+  else if c == "]" then "["
+  else "{"
+
+# Walk remaining characters with a stack of currently open brackets.
+def check(cs: List[Text], stack: List[Text]) -> Bool =
+  match cs {
+    [] => match stack {
+      [] => true,
+      [_, .._rest] => false,
+    },
+    [c, ..rest] =>
+      if is_open(c) then
+        check(rest, [c] ++ stack)
+      else if is_close(c) then
+        match stack {
+          [] => false,
+          [top, ..deeper] =>
+            if top == opener_of(c) then check(rest, deeper) else false,
+        }
+      else
+        check(rest, stack),
+  }
+
+def balanced(t: Text) -> Bool =
+  check(chars(t), [])
+
+test "nested correct" = balanced("([{}])")
+test "nested correct with noise" = balanced("a(b[c]{d}e)f")
+test "interleaved wrong" = not balanced("([)]")
+test "empty text" = balanced("")
+test "unmatched closer" = not balanced(")")
+test "unmatched closer after pair" = not balanced("()]")
+test "unmatched opener" = not balanced("(")
+test "non brackets ignored" = balanced("no brackets here!")
+
+def main(io: Io) -> Int = {
+  let _ = print(io, "balanced(\"([{}])\"): " ++ (if balanced("([{}])") then "true" else "false"));
+  let _ = print(io, "balanced(\"([)]\"): " ++ (if balanced("([)]") then "true" else "false"));
+  0
+}

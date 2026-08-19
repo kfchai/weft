@@ -1,0 +1,8 @@
+
+assert roman(1) == "I", "1"
+assert roman(4) == "IV", "4"
+assert roman(14) == "XIV", "14"
+assert roman(90) == "XC", "90"
+assert roman(1990) == "MCMXC", "1990"
+assert roman(3999) == "MMMCMXCIX", "3999"
+print("ALL HIDDEN TESTS PASS")

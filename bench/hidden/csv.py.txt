@@ -1,0 +1,20 @@
+
+def _expect_err(s):
+    try:
+        parse_csv(s)
+        return False
+    except ValueError as e:
+        return "quote" in str(e)
+
+assert parse_csv("a,b\nc,d") == [["a", "b"], ["c", "d"]], "simple"
+assert parse_csv('a,"b,c",d') == [["a", "b,c", "d"]], "quoted comma"
+assert parse_csv('"a""b",c') == [['a"b', "c"]], "escaped quote"
+assert parse_csv('a,"x\ny"') == [["a", "x\ny"]], "quoted newline"
+assert parse_csv("a,,b") == [["a", "", "b"]], "empty fields"
+assert parse_csv("a,b\n") == [["a", "b"]], "trailing newline"
+assert parse_csv('""') == [[""]], "only quotes"
+assert parse_csv("") == [], "empty input"
+assert _expect_err('a"b,c'), "stray quote"
+assert _expect_err('"a"x,b'), "junk after close"
+assert _expect_err('"abc'), "unterminated"
+print("ALL HIDDEN TESTS PASS")

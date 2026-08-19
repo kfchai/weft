@@ -1,0 +1,15 @@
+
+test "h simple" = parse_csv("a,b\nc,d") == Ok([["a", "b"], ["c", "d"]])
+test "h quoted comma" = parse_csv("a,\"b,c\",d") == Ok([["a", "b,c", "d"]])
+test "h escaped quote" = parse_csv("\"a\"\"b\",c") == Ok([["a\"b", "c"]])
+test "h quoted newline" = parse_csv("a,\"x\ny\"") == Ok([["a", "x\ny"]])
+test "h empty fields" = parse_csv("a,,b") == Ok([["a", "", "b"]])
+test "h trailing newline" = parse_csv("a,b\n") == Ok([["a", "b"]])
+test "h only quotes" = parse_csv("\"\"") == Ok([[""]])
+test "h empty input" = parse_csv("") == Ok([])
+test "h stray quote mid-field" =
+  match parse_csv("a\"b,c") { Err(m) => contains(m, "quote"), Ok(_) => false, }
+test "h junk after closing quote" =
+  match parse_csv("\"a\"x,b") { Err(m) => contains(m, "quote"), Ok(_) => false, }
+test "h unterminated" =
+  match parse_csv("\"abc") { Err(m) => contains(m, "quote"), Ok(_) => false, }

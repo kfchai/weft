@@ -1,0 +1,80 @@
+# EXIT-TEST submission — task: grades — verdict: PASS (no spec violations)
+# Exhaustive match over the 4-case variant; agent correctly chose if/else for
+# Int thresholds, noting Int can't be matched exhaustively by literals.
+
+type Student = {name: Text, score: Int}
+
+type Grade = A | B | C | Fail
+
+# Assign a letter grade from a student's Int score.
+def grade(s: Student) -> Grade =
+  if s.score >= 90 then A
+  else if s.score >= 80 then B
+  else if s.score >= 70 then C
+  else Fail
+
+# Render a grade as Text. Exhaustive over all four cases [W24].
+def grade_text(g: Grade) -> Text =
+  match g {
+    A => "A",
+    B => "B",
+    C => "C",
+    Fail => "Fail",
+  }
+
+# One report line: "name: grade".
+def student_line(s: Student) -> Text =
+  s.name ++ ": " ++ grade_text(grade(s))
+
+# Sum of all scores in a class.
+def total_score(students: List[Student]) -> Int =
+  fold(students, 0, (acc: Int, s: Student) => acc + s.score)
+
+# Class average as an Int (integer division); 0 for an empty class.
+def class_average(students: List[Student]) -> Int = {
+  let n = len(students);
+  if n == 0 then 0 else total_score(students) / n
+}
+
+# Full report: one line per student, then a summary line with the average.
+def report(students: List[Student]) -> Text = {
+  let lines = map(students, (s: Student) => student_line(s));
+  let summary = "average: " ++ text_of_int(class_average(students));
+  join(append(lines, summary), "\n")
+}
+
+def sample_class: List[Student] = [
+  {name: "Ada", score: 95},
+  {name: "Grace", score: 90},
+  {name: "Alan", score: 84},
+  {name: "Edsger", score: 73},
+  {name: "Charles", score: 58},
+]
+
+def main(io: Io) -> Int = {
+  let _ = print(io, report(sample_class));
+  0
+}
+
+# --- Grade boundary tests ---
+
+test "score 90 is A" = grade({name: "x", score: 90}) == A
+test "score 89 is B" = grade({name: "x", score: 89}) == B
+test "score 80 is B" = grade({name: "x", score: 80}) == B
+test "score 79 is C" = grade({name: "x", score: 79}) == C
+test "score 70 is C" = grade({name: "x", score: 70}) == C
+test "score 69 is Fail" = grade({name: "x", score: 69}) == Fail
+test "score 100 is A" = grade({name: "x", score: 100}) == A
+test "score 0 is Fail" = grade({name: "x", score: 0}) == Fail
+
+# --- Report tests ---
+
+test "report of small class" =
+  report([{name: "Ada", score: 95}, {name: "Bob", score: 73}])
+    == "Ada: A\nBob: C\naverage: 84"
+
+test "report of empty class has zero average" =
+  report([]) == "average: 0"
+
+test "single student report" =
+  report([{name: "Eve", score: 80}]) == "Eve: B\naverage: 80"

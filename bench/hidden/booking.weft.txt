@@ -1,0 +1,18 @@
+
+test "h first booking" = book([], 1, 3) == Ok([{start: 1, end: 3}])
+test "h touch right merges" =
+  book([{start: 1, end: 3}], 3, 5) == Ok([{start: 1, end: 5}])
+test "h chain merge" =
+  book([{start: 1, end: 3}, {start: 5, end: 7}], 3, 5) == Ok([{start: 1, end: 7}])
+test "h merge left" = book([{start: 4, end: 6}], 1, 4) == Ok([{start: 1, end: 6}])
+test "h extend at end" = book([{start: 0, end: 10}], 10, 12) == Ok([{start: 0, end: 12}])
+test "h sorted insert" =
+  book([{start: 5, end: 7}], 1, 3) == Ok([{start: 1, end: 3}, {start: 5, end: 7}])
+test "h overlap rejected" =
+  match book([{start: 1, end: 3}], 2, 4) { Err(m) => contains(m, "overlap"), Ok(_) => false, }
+test "h contained rejected" =
+  match book([{start: 0, end: 10}], 3, 4) { Err(m) => contains(m, "overlap"), Ok(_) => false, }
+test "h invalid empty range" =
+  match book([{start: 4, end: 6}], 4, 4) { Err(m) => contains(m, "invalid"), Ok(_) => false, }
+test "h invalid reversed" =
+  match book([], 5, 2) { Err(m) => contains(m, "invalid"), Ok(_) => false, }

@@ -1,0 +1,26 @@
+# Variants [W12], structural records [W11], and exhaustive match [W24].
+
+type Shape = Circle(Float) | Rect(Float, Float)
+
+type Named = {label: Text, shape: Shape}
+
+def area(s: Shape) -> Float =
+  match s {
+    Circle(r) => 3.14159 * r * r,
+    Rect(w, h) => w * h,
+  }
+
+# Copy-with-changes [W11]: the original is untouched (immutability, [W1]).
+def relabel(n: Named, new_label: Text) -> Named =
+  {..n, label: new_label}
+
+test "rect area" = area(Rect(3.0, 4.0)) == 12.0
+test "relabel keeps shape" = {
+  let a = {label: "a", shape: Circle(1.0)};
+  relabel(a, "b").shape == Circle(1.0)
+}
+
+def main(io: Io) -> Int = {
+  let _ = print(io, text_of_float(area(Circle(2.0))));
+  0
+}

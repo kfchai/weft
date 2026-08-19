@@ -1,0 +1,71 @@
+# EXIT-TEST submission — task: rpn — verdict: PASS (no spec violations)
+# Correct operand order (a op b with b popped first), errors all distinct,
+# `?` propagation used with matching Err type per [W26].
+
+def is_op(tok: Text) -> Bool =
+  tok == "+" or tok == "-" or tok == "*" or tok == "/"
+
+# Pop two operands (top of stack is the list head), apply the operator,
+# push the result back.
+def apply_op(stack: List[Int], tok: Text) -> Result[List[Int], Text] =
+  match stack {
+    [] => Err("stack underflow"),
+    [b, ..rest] => match rest {
+      [] => Err("stack underflow"),
+      [a, ..rest2] => match tok {
+        "+" => Ok([a + b] ++ rest2),
+        "-" => Ok([a - b] ++ rest2),
+        "*" => Ok([a * b] ++ rest2),
+        "/" => if b == 0 then Err("division by zero") else Ok([a / b] ++ rest2),
+        _ => Err("unrecognized token: " ++ tok),
+      },
+    },
+  }
+
+def step(stack: List[Int], tok: Text) -> Result[List[Int], Text] =
+  if is_op(tok) then apply_op(stack, tok)
+  else match int_of_text(tok) {
+    Some(n) => Ok([n] ++ stack),
+    None => Err("unrecognized token: " ++ tok),
+  }
+
+def finish(stack: List[Int]) -> Result[Int, Text] =
+  match stack {
+    [] => Err("stack underflow"),
+    [x, ..rest] => match rest {
+      [] => Ok(x),
+      [_, ..more] => Err("leftover operands"),
+    },
+  }
+
+def run(toks: List[Text], stack: List[Int]) -> Result[Int, Text] =
+  match toks {
+    [] => finish(stack),
+    [tok, ..rest] => {
+      let next = step(stack, tok)?;
+      run(rest, next)
+    },
+  }
+
+def rpn(t: Text) -> Result[Int, Text] = {
+  let toks = filter(split(t, " "), (s: Text) => text_len(s) > 0);
+  run(toks, [])
+}
+
+test "successful computation" = rpn("3 4 + 2 *") == Ok(14)
+test "stack underflow" = rpn("1 +") == Err("stack underflow")
+test "unrecognized token" = rpn("1 foo +") == Err("unrecognized token: foo")
+test "division by zero" = rpn("1 0 /") == Err("division by zero")
+test "leftover operands" = rpn("1 2 3 +") == Err("leftover operands")
+
+def main(io: Io) -> Int =
+  match rpn("3 4 + 2 *") {
+    Ok(n) => {
+      let _ = print(io, text_of_int(n));
+      0
+    },
+    Err(e) => {
+      let _ = print(io, e);
+      1
+    },
+  }

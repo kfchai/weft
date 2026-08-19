@@ -1,0 +1,664 @@
+# ============================================================
+# orderflow.weft — a single-file order-management system.
+# Domains: money/catalog, inventory, cart, pricing, orders,
+# reporting. All money is Int cents; all math is integer math.
+# ============================================================
+
+# ------------------------------------------------------------
+# 1. Money & catalog
+# ------------------------------------------------------------
+
+# A product in the catalog; unit_cents is the price of one unit in cents.
+type Product = {sku: Text, name: Text, unit_cents: Int}
+
+# The full store catalog: every product this store can sell.
+def catalog: List[Product] = [
+  {sku: "TEA-001", name: "Green Tea Tin", unit_cents: 1250},
+  {sku: "TEA-002", name: "Earl Grey Tin", unit_cents: 1350},
+  {sku: "MUG-001", name: "Stoneware Mug", unit_cents: 1800},
+  {sku: "POT-001", name: "Cast Iron Teapot", unit_cents: 6400},
+  {sku: "HNY-001", name: "Wildflower Honey", unit_cents: 950},
+  {sku: "KTL-001", name: "Gooseneck Kettle", unit_cents: 8900}
+]
+
+# Find a product by sku with stdlib find; None when the sku is unknown.
+def find_product(sku: Text) -> Option[Product] =
+  find(catalog, (p: Product) => p.sku == sku)
+
+# Find a product by sku, or an Err naming the missing sku.
+def product_or_err(sku: Text) -> Result[Product, Text] =
+  ok_or(find_product(sku), "unknown sku: " ++ sku)
+
+# The unit price in cents for a sku, or an Err for unknown skus.
+def unit_price(sku: Text) -> Result[Int, Text] = {
+  let p = product_or_err(sku)?;
+  Ok(p.unit_cents)
+}
+
+# Left-pad a small non-negative Int to two digits, for cents formatting.
+def pad2(n: Int where n >= 0 and n <= 99) -> Text =
+  if n < 10 then "0" ++ text_of_int(n) else text_of_int(n)
+
+# Render a non-negative cents amount as dollars, e.g. 1250 -> "$12.50".
+def format_cents(cents: Int where cents >= 0) -> Text =
+  "$" ++ text_of_int(cents / 100) ++ "." ++ pad2(cents % 100)
+
+# ------------------------------------------------------------
+# 2. Inventory
+# ------------------------------------------------------------
+
+# A stock level for one sku; the [W42] invariant makes negative stock unrepresentable.
+type Stock = {sku: Text, qty: Int} where qty >= 0
+
+# The opening inventory for the demo store.
+def initial_stock: List[Stock] = [
+  Stock{sku: "TEA-001", qty: 40},
+  Stock{sku: "TEA-002", qty: 25},
+  Stock{sku: "MUG-001", qty: 12},
+  Stock{sku: "POT-001", qty: 4},
+  Stock{sku: "HNY-001", qty: 30},
+  Stock{sku: "KTL-001", qty: 6}
+]
+
+# The stock record for a sku, if the inventory tracks it.
+def find_stock(inv: List[Stock], sku: Text) -> Option[Stock] =
+  find(inv, (s: Stock) => s.sku == sku)
+
+# The quantity on hand for a sku; unknown skus count as zero.
+def stock_qty(inv: List[Stock], sku: Text) -> Int =
+  match find_stock(inv, sku) {
+    Some(s) => s.qty,
+    None => 0,
+  }
+
+# Remove qty units of a sku from inventory, or Err when stock is insufficient.
+def take_stock(inv: List[Stock], sku: Text, qty: Int where qty > 0) -> Result[List[Stock], Text] =
+  if stock_qty(inv, sku) < qty
+  then Err("insufficient stock for " ++ sku ++ ": have "
+       ++ text_of_int(stock_qty(inv, sku)) ++ ", want " ++ text_of_int(qty))
+  else Ok(map(inv, (s: Stock) =>
+    if s.sku == sku then Stock{..s, qty: s.qty - qty} else s))
+
+# Add qty units of a tracked sku back to inventory, or Err for unknown skus.
+def restock(inv: List[Stock], sku: Text, qty: Int where qty > 0) -> Result[List[Stock], Text] =
+  match find_stock(inv, sku) {
+    Some(_) => Ok(map(inv, (s: Stock) =>
+      if s.sku == sku then Stock{..s, qty: s.qty + qty} else s)),
+    None => Err("cannot restock unknown sku: " ++ sku),
+  }
+
+# Total units on hand across every sku in the inventory.
+def total_units(inv: List[Stock]) -> Int =
+  fold(inv, 0, (acc: Int, s: Stock) => acc + s.qty)
+
+# ------------------------------------------------------------
+# 3. Cart
+# ------------------------------------------------------------
+
+# One cart line: a sku and how many units of it the shopper wants.
+type Line = {sku: Text, qty: Int}
+
+# Add qty units of a sku to a cart, merging into an existing line for that sku.
+def add_to_cart(cart: List[Line], sku: Text, qty: Int where qty > 0) -> List[Line] =
+  match find(cart, (l: Line) => l.sku == sku) {
+    Some(_) => map(cart, (l: Line) =>
+      if l.sku == sku then {..l, qty: l.qty + qty} else l),
+    None => append(cart, {sku: sku, qty: qty}),
+  }
+
+# The quantity of a sku currently in the cart; zero when absent.
+def cart_qty(cart: List[Line], sku: Text) -> Int =
+  match find(cart, (l: Line) => l.sku == sku) {
+    Some(l) => l.qty,
+    None => 0,
+  }
+
+# Total number of units across all cart lines.
+def cart_count(cart: List[Line]) -> Int =
+  fold(cart, 0, (acc: Int, l: Line) => acc + l.qty)
+
+# The cost of one cart line in cents, or Err when the sku is not in the catalog.
+def line_cost(l: Line) -> Result[Int, Text] = {
+  let price = unit_price(l.sku)?;
+  Ok(price * l.qty)
+}
+
+# The cart subtotal in cents before any discount, or the first lookup Err.
+def cart_subtotal(cart: List[Line]) -> Result[Int, Text] =
+  match cart {
+    [] => Ok(0),
+    [l, ..rest] => {
+      let head = line_cost(l)?;
+      let tail = cart_subtotal(rest)?;
+      Ok(head + tail)
+    },
+  }
+
+# ------------------------------------------------------------
+# 4. Pricing
+# ------------------------------------------------------------
+
+# A per-sku coupon granting percent off that sku's line cost.
+type Coupon = {sku: Text, percent: Int}
+
+# Construct a coupon, enforcing that percent stays within 1..90.
+def make_coupon(sku: Text, percent: Int where percent >= 1 and percent <= 90) -> Coupon =
+  {sku: sku, percent: percent}
+
+# The tier discount percent a subtotal earns: 10% over 50000, 5% over 10000.
+def tier_percent(subtotal_cents: Int where subtotal_cents >= 0) -> Int =
+  if subtotal_cents > 50000 then 10
+  else if subtotal_cents > 10000 then 5
+  else 0
+
+# The tier discount in cents for a subtotal, using integer math.
+def tier_discount(subtotal_cents: Int where subtotal_cents >= 0) -> Int =
+  subtotal_cents * tier_percent(subtotal_cents) / 100
+
+# The first coupon that applies to a sku, if any.
+def coupon_for(coupons: List[Coupon], sku: Text) -> Option[Coupon] =
+  find(coupons, (c: Coupon) => c.sku == sku)
+
+# The coupon discount in cents for one cart line, or Err for unknown skus.
+def line_coupon_discount(coupons: List[Coupon], l: Line) -> Result[Int, Text] = {
+  let cost = line_cost(l)?;
+  match coupon_for(coupons, l.sku) {
+    Some(c) => Ok(cost * c.percent / 100),
+    None => Ok(0),
+  }
+}
+
+# The total coupon discount in cents across the whole cart.
+def coupon_discount(coupons: List[Coupon], cart: List[Line]) -> Result[Int, Text] =
+  match cart {
+    [] => Ok(0),
+    [l, ..rest] => {
+      let head = line_coupon_discount(coupons, l)?;
+      let tail = coupon_discount(coupons, rest)?;
+      Ok(head + tail)
+    },
+  }
+
+# Subtract a discount from a subtotal without ever going below zero.
+def clamp_total(subtotal_cents: Int where subtotal_cents >= 0, discount_cents: Int where discount_cents >= 0) -> Int =
+  max(0, subtotal_cents - discount_cents)
+
+# A fully priced cart: subtotal, combined discount, shipping fee, final total.
+type Pricing = {subtotal: Int, discount: Int, shipping: Int, total: Int}
+
+# The flat shipping fee in cents, waived at or above 30000c post-discount.
+def shipping_fee(discounted_cents: Int where discounted_cents >= 0) -> Int =
+  if discounted_cents >= 30000 then 0 else 500
+
+# Price a cart end to end: subtotal, tier + coupon discounts, shipping, total.
+def price_cart(cart: List[Line], coupons: List[Coupon]) -> Result[Pricing, Text] = {
+  let sub = cart_subtotal(cart)?;
+  let coup = coupon_discount(coupons, cart)?;
+  let disc = tier_discount(sub) + coup;
+  let discounted = clamp_total(sub, disc);
+  let ship = shipping_fee(discounted);
+  Ok({subtotal: sub, discount: disc, shipping: ship, total: discounted + ship})
+}
+
+# ------------------------------------------------------------
+# 5. Orders
+# ------------------------------------------------------------
+
+# The order lifecycle state machine.
+type OrderState = Draft | Placed | Shipped | Cancelled
+
+# An order: an id, its cart lines, its lifecycle state, and its priced total.
+type Order = {id: Int, lines: List[Line], state: OrderState, total_cents: Int}
+
+# The result of placing (or cancelling) an order: the order plus updated inventory.
+type Placement = {order: Order, inv: List[Stock]}
+
+# A human-readable name for an order state.
+def state_name(s: OrderState) -> Text =
+  match s {
+    Draft => "draft",
+    Placed => "placed",
+    Shipped => "shipped",
+    Cancelled => "cancelled",
+  }
+
+# Whether the state machine allows moving from one state to another.
+def can_transition(from: OrderState, to: OrderState) -> Bool =
+  match from {
+    Draft => match to { Placed => true, Cancelled => true, _ => false },
+    Placed => match to { Shipped => true, Cancelled => true, _ => false },
+    Shipped => false,
+    Cancelled => false,
+  }
+
+# Move an order to a new state, or Err naming the illegal transition.
+def transition(o: Order, to: OrderState) -> Result[Order, Text] =
+  if can_transition(o.state, to)
+  then Ok({..o, state: to})
+  else Err("illegal transition: " ++ state_name(o.state) ++ " -> " ++ state_name(to))
+
+# Create a fresh draft order for a cart, not yet priced or placed.
+def new_order(id: Int, lines: List[Line]) -> Order =
+  {id: id, lines: lines, state: Draft, total_cents: 0}
+
+# Take stock for every line of an order, or Err on the first shortage.
+def take_lines(inv: List[Stock], lines: List[Line]) -> Result[List[Stock], Text] =
+  match lines {
+    [] => Ok(inv),
+    [l, ..rest] => {
+      let next = take_stock(inv, l.sku, l.qty)?;
+      take_lines(next, rest)
+    },
+  }
+
+# Restock every line of an order, or Err on the first unknown sku.
+def restock_lines(inv: List[Stock], lines: List[Line]) -> Result[List[Stock], Text] =
+  match lines {
+    [] => Ok(inv),
+    [l, ..rest] => {
+      let next = restock(inv, l.sku, l.qty)?;
+      restock_lines(next, rest)
+    },
+  }
+
+# Place a draft order: price it, take stock for every line, move it to Placed.
+def place_order(o: Order, inv: List[Stock], coupons: List[Coupon]) -> Result[Placement, Text] =
+  match o.state {
+    Draft =>
+      if len(o.lines) == 0
+      then Err("cannot place an empty order")
+      else {
+        let priced = price_cart(o.lines, coupons)?;
+        let taken = take_lines(inv, o.lines)?;
+        let placed = transition({..o, total_cents: priced.total}, Placed)?;
+        Ok({order: placed, inv: taken})
+      },
+    _ => Err("only draft orders can be placed, got " ++ state_name(o.state)),
+  }
+
+# Ship a placed order, or Err if the transition is illegal.
+def ship_order(o: Order) -> Result[Order, Text] =
+  transition(o, Shipped)
+
+# Cancel a draft or placed order, or Err if already shipped or cancelled.
+def cancel_order(o: Order) -> Result[Order, Text] =
+  transition(o, Cancelled)
+
+# Cancel a placed order and return its stock, yielding order + restored inventory.
+def cancel_and_restock(o: Order, inv: List[Stock]) -> Result[Placement, Text] = {
+  let cancelled = cancel_order(o)?;
+  let restored = restock_lines(inv, o.lines)?;
+  Ok({order: cancelled, inv: restored})
+}
+
+# ------------------------------------------------------------
+# 6. Reporting
+# ------------------------------------------------------------
+
+# Revenue an order contributes: its total when placed or shipped, else zero.
+def order_revenue(o: Order) -> Int =
+  match o.state {
+    Placed => o.total_cents,
+    Shipped => o.total_cents,
+    _ => 0,
+  }
+
+# Total revenue in cents across a list of orders.
+def total_revenue(orders: List[Order]) -> Int =
+  fold(orders, 0, (acc: Int, o: Order) => acc + order_revenue(o))
+
+# Every revenue-bearing line across a list of orders, in order of appearance.
+def revenue_lines(orders: List[Order]) -> List[Line] =
+  fold(orders, [], (acc: List[Line], o: Order) =>
+    if order_revenue(o) > 0 then acc ++ o.lines else acc)
+
+# Units sold per sku, merged in first-appearance order via cart merging.
+def sku_totals(orders: List[Order]) -> List[Line] =
+  fold(revenue_lines(orders), [], (acc: List[Line], l: Line) =>
+    add_to_cart(acc, l.sku, l.qty))
+
+# The line with the highest qty; ties keep the line appearing earlier.
+def max_line(lines: List[Line]) -> Option[Line] =
+  match lines {
+    [] => None,
+    [l, ..rest] =>
+      match max_line(rest) {
+        None => Some(l),
+        Some(b) => if b.qty > l.qty then Some(b) else Some(l),
+      },
+  }
+
+# The best-selling sku across orders; ties go to the first-appearing sku.
+def best_seller(orders: List[Order]) -> Option[Text] =
+  match max_line(sku_totals(orders)) {
+    Some(l) => Some(l.sku),
+    None => None,
+  }
+
+# The display name for a sku, falling back to the raw sku when unknown.
+def display_name(sku: Text) -> Text =
+  match find_product(sku) {
+    Some(p) => p.name,
+    None => sku,
+  }
+
+# One formatted receipt row: "name x qty @ unit = amount".
+def receipt_row(l: Line) -> Text =
+  match find_product(l.sku) {
+    Some(p) => "  " ++ p.name ++ " x " ++ text_of_int(l.qty)
+      ++ " @ " ++ format_cents(p.unit_cents)
+      ++ " = " ++ format_cents(p.unit_cents * l.qty),
+    None => "  " ++ l.sku ++ " x " ++ text_of_int(l.qty) ++ " (unknown sku)",
+  }
+
+# A labelled money row for the receipt footer.
+def money_row(label: Text, cents: Int where cents >= 0) -> Text =
+  "  " ++ label ++ ": " ++ format_cents(cents)
+
+# A full multi-line receipt Text for an order and its coupons.
+def receipt(o: Order, coupons: List[Coupon]) -> Text =
+  match price_cart(o.lines, coupons) {
+    Ok(p) => join(
+      ["=== order #" ++ text_of_int(o.id) ++ " (" ++ state_name(o.state) ++ ") ==="]
+        ++ map(o.lines, (l: Line) => receipt_row(l))
+        ++ [money_row("subtotal", p.subtotal),
+            money_row("discount", p.discount),
+            money_row("Shipping", p.shipping),
+            money_row("total", p.total)],
+      "\n"),
+    Err(e) => "receipt error: " ++ e,
+  }
+
+# ------------------------------------------------------------
+# Tests — 1. Money & catalog
+# ------------------------------------------------------------
+
+test "catalog has six products" =
+  len(catalog) == 6
+
+test "find product hit" =
+  match find_product("MUG-001") {
+    Some(p) => p.name == "Stoneware Mug",
+    None => false,
+  }
+
+test "find product miss" =
+  find_product("NOPE") == None
+
+test "unit price ok" =
+  unit_price("HNY-001") == Ok(950)
+
+test "unit price unknown sku" =
+  unit_price("NOPE") == Err("unknown sku: NOPE")
+
+test "format cents pads sub-dime remainders" =
+  format_cents(1205) == "$12.05"
+
+test "format cents zero" =
+  format_cents(0) == "$0.00"
+
+test "format cents always has a dot" (n: Int where n >= 0) =
+  contains(format_cents(n), ".")
+
+test "pad2 is always two chars" (n: Int where n >= 0 and n <= 99) =
+  text_len(pad2(n)) == 2
+
+# ------------------------------------------------------------
+# Tests — 2. Inventory
+# ------------------------------------------------------------
+
+test "stock qty tracked" =
+  stock_qty(initial_stock, "POT-001") == 4
+
+test "stock qty unknown is zero" =
+  stock_qty(initial_stock, "NOPE") == 0
+
+test "take stock reduces" =
+  match take_stock(initial_stock, "POT-001", 3) {
+    Ok(inv) => stock_qty(inv, "POT-001") == 1,
+    Err(_) => false,
+  }
+
+test "take stock reports insufficiency" =
+  match take_stock(initial_stock, "POT-001", 5) {
+    Err(m) => contains(m, "insufficient"),
+    Ok(_) => false,
+  }
+
+test "take stock conserves other skus" =
+  match take_stock(initial_stock, "TEA-001", 10) {
+    Ok(inv) => total_units(inv) == total_units(initial_stock) - 10,
+    Err(_) => false,
+  }
+
+test "restock unknown sku errs" =
+  restock(initial_stock, "NOPE", 5) == Err("cannot restock unknown sku: NOPE")
+
+test "restock then take round-trips" (q: Int where q > 0 and q < 500) =
+  match restock(initial_stock, "MUG-001", q) {
+    Ok(up) => match take_stock(up, "MUG-001", q) {
+      Ok(down) => down == initial_stock,
+      Err(_) => false,
+    },
+    Err(_) => false,
+  }
+
+# ------------------------------------------------------------
+# Tests — 3. Cart
+# ------------------------------------------------------------
+
+test "add to cart appends new sku" =
+  add_to_cart([], "TEA-001", 2) == [{sku: "TEA-001", qty: 2}]
+
+test "add to cart merges duplicate sku into one line" =
+  len(add_to_cart(add_to_cart([], "TEA-001", 1), "TEA-001", 2)) == 1
+
+test "cart merge adds quantities" (a: Int where a > 0 and a < 1000, b: Int where b > 0 and b < 1000) =
+  cart_qty(add_to_cart(add_to_cart([], "X", a), "X", b), "X") == a + b
+
+test "cart qty absent is zero" =
+  cart_qty(add_to_cart([], "TEA-001", 2), "MUG-001") == 0
+
+test "cart count sums units" =
+  cart_count(add_to_cart(add_to_cart([], "TEA-001", 2), "HNY-001", 1)) == 3
+
+test "cart subtotal sums line costs" =
+  cart_subtotal(add_to_cart(add_to_cart([], "TEA-001", 2), "HNY-001", 1)) == Ok(3450)
+
+test "cart subtotal unknown sku errs" =
+  cart_subtotal([{sku: "NOPE", qty: 1}]) == Err("unknown sku: NOPE")
+
+# ------------------------------------------------------------
+# Tests — 4. Pricing
+# ------------------------------------------------------------
+
+test "no tier at or under 10000" =
+  tier_percent(10000) == 0
+
+test "five percent tier over 10000" =
+  tier_percent(10001) == 5
+
+test "ten percent tier over 50000" =
+  tier_percent(50001) == 10
+
+test "tier discount uses integer math" =
+  tier_discount(20000) == 1000
+
+test "tier discount stays within subtotal" (s: Int where s >= 0 and s < 1000000) = {
+  let d = tier_discount(s);
+  d >= 0 and d <= s
+}
+
+test "coupon applies to its sku" =
+  line_coupon_discount([make_coupon("TEA-001", 20)], {sku: "TEA-001", qty: 2}) == Ok(500)
+
+test "coupon skips other skus" =
+  line_coupon_discount([make_coupon("TEA-001", 20)], {sku: "HNY-001", qty: 3}) == Ok(0)
+
+test "final total never negative" (s: Int where s >= 0, d: Int where d >= 0) =
+  clamp_total(s, d) >= 0
+
+test "price cart combines tier and coupon discounts" =
+  price_cart(add_to_cart([], "POT-001", 2), [make_coupon("POT-001", 10)])
+    == Ok({subtotal: 12800, discount: 1920, shipping: 500, total: 11380})
+
+test "shipping fee applied below threshold" =
+  shipping_fee(29999) == 500
+
+test "shipping fee waived at threshold" =
+  shipping_fee(30000) == 0
+
+test "shipping fee waived above threshold" =
+  shipping_fee(50000) == 0
+
+test "price cart charges shipping below threshold" =
+  price_cart(add_to_cart([], "TEA-001", 2), [])
+    == Ok({subtotal: 2500, discount: 0, shipping: 500, total: 3000})
+
+test "price cart waives shipping above threshold" =
+  price_cart(add_to_cart([], "POT-001", 5), [])
+    == Ok({subtotal: 32000, discount: 1600, shipping: 0, total: 30400})
+
+test "receipt shows shipping fee when charged" = {
+  let r = receipt(new_order(21, add_to_cart([], "TEA-001", 2)), []);
+  contains(r, "Shipping: $5.00") and contains(r, "total: $30.00")
+}
+
+test "receipt shows zero shipping when waived" = {
+  let r = receipt(new_order(22, add_to_cart([], "POT-001", 5)), []);
+  contains(r, "Shipping: $0.00") and contains(r, "total: $304.00")
+}
+
+# ------------------------------------------------------------
+# Tests — 5. Orders
+# ------------------------------------------------------------
+
+test "draft can be placed" =
+  can_transition(Draft, Placed)
+
+test "placed can be cancelled" =
+  can_transition(Placed, Cancelled)
+
+test "shipped is terminal" =
+  not can_transition(Shipped, Cancelled) and not can_transition(Shipped, Draft)
+
+test "illegal transition errs" =
+  match transition(new_order(1, []), Shipped) {
+    Err(m) => contains(m, "illegal"),
+    Ok(_) => false,
+  }
+
+test "place order takes stock and prices total" =
+  match place_order(new_order(2, add_to_cart([], "MUG-001", 2)), initial_stock, []) {
+    Ok(pl) => stock_qty(pl.inv, "MUG-001") == 10
+      and pl.order.state == Placed
+      and pl.order.total_cents == 4100,
+    Err(_) => false,
+  }
+
+test "place order fails on shortage" =
+  match place_order(new_order(3, add_to_cart([], "POT-001", 99)), initial_stock, []) {
+    Err(m) => contains(m, "insufficient"),
+    Ok(_) => false,
+  }
+
+test "empty order cannot be placed" =
+  match place_order(new_order(4, []), initial_stock, []) {
+    Err(m) => contains(m, "empty"),
+    Ok(_) => false,
+  }
+
+test "an order cannot be placed twice" =
+  match place_order(new_order(5, add_to_cart([], "HNY-001", 1)), initial_stock, []) {
+    Ok(pl) => match place_order(pl.order, pl.inv, []) {
+      Err(m) => contains(m, "only draft"),
+      Ok(_) => false,
+    },
+    Err(_) => false,
+  }
+
+test "ship after place succeeds" =
+  match place_order(new_order(6, add_to_cart([], "TEA-002", 1)), initial_stock, []) {
+    Ok(pl) => ship_order(pl.order) == Ok({..pl.order, state: Shipped}),
+    Err(_) => false,
+  }
+
+test "cancel and restock restores inventory" =
+  match place_order(new_order(7, add_to_cart([], "KTL-001", 2)), initial_stock, []) {
+    Ok(pl) => match cancel_and_restock(pl.order, pl.inv) {
+      Ok(back) => back.inv == initial_stock and back.order.state == Cancelled,
+      Err(_) => false,
+    },
+    Err(_) => false,
+  }
+
+# ------------------------------------------------------------
+# Tests — 6. Reporting
+# ------------------------------------------------------------
+
+test "revenue counts placed and shipped only" =
+  total_revenue([
+    {id: 1, lines: [], state: Placed, total_cents: 100},
+    {id: 2, lines: [], state: Draft, total_cents: 999},
+    {id: 3, lines: [], state: Shipped, total_cents: 250},
+    {id: 4, lines: [], state: Cancelled, total_cents: 400}
+  ]) == 350
+
+test "best seller picks the highest total qty" =
+  best_seller([
+    {id: 1, lines: [{sku: "A", qty: 2}], state: Placed, total_cents: 10},
+    {id: 2, lines: [{sku: "B", qty: 5}], state: Shipped, total_cents: 10}
+  ]) == Some("B")
+
+test "best seller tie goes to first appearance" =
+  best_seller([
+    {id: 1, lines: [{sku: "A", qty: 3}], state: Placed, total_cents: 10},
+    {id: 2, lines: [{sku: "B", qty: 3}], state: Placed, total_cents: 10}
+  ]) == Some("A")
+
+test "best seller merges across orders" =
+  best_seller([
+    {id: 1, lines: [{sku: "A", qty: 2}], state: Placed, total_cents: 10},
+    {id: 2, lines: [{sku: "B", qty: 3}], state: Placed, total_cents: 10},
+    {id: 3, lines: [{sku: "A", qty: 2}], state: Shipped, total_cents: 10}
+  ]) == Some("A")
+
+test "cancelled orders sell nothing" =
+  best_seller([{id: 1, lines: [{sku: "A", qty: 9}], state: Cancelled, total_cents: 10}]) == None
+
+test "best seller of no orders is None" =
+  best_seller([]) == None
+
+test "receipt names products and totals" = {
+  let r = receipt(new_order(8, add_to_cart([], "TEA-001", 2)), []);
+  contains(r, "Green Tea Tin") and contains(r, "subtotal") and contains(r, "$25.00")
+}
+
+test "receipt row flags unknown skus" =
+  contains(receipt_row({sku: "ZZZ", qty: 1}), "unknown")
+
+test "display name falls back to sku" =
+  display_name("KTL-001") == "Gooseneck Kettle" and display_name("ZZZ") == "ZZZ"
+
+# ------------------------------------------------------------
+# Demo entry point
+# ------------------------------------------------------------
+
+# Demo: build a cart, place the order, print its receipt and a stock summary.
+def main(io: Io) -> Int = {
+  let cart = add_to_cart(add_to_cart(add_to_cart([], "TEA-001", 2), "POT-001", 1), "TEA-001", 1);
+  let coupons = [make_coupon("TEA-001", 15)];
+  match place_order(new_order(1001, cart), initial_stock, coupons) {
+    Ok(pl) => {
+      let _ = print(io, receipt(pl.order, coupons));
+      let _ = print(io, "units left in stock: " ++ text_of_int(total_units(pl.inv)));
+      let seller = unwrap_or(best_seller([pl.order]), "n/a");
+      let _ = print(io, "best seller: " ++ display_name(seller));
+      0
+    },
+    Err(e) => {
+      let _ = print(io, "demo failed: " ++ e);
+      1
+    },
+  }
+}

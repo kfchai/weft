@@ -1,0 +1,7 @@
+
+assert luhn("4539148803436467") is True, "valid16"
+assert luhn("8273123273520569") is False, "invalid16"
+assert luhn("59") is True, "59"
+assert luhn("0") is False, "single digit"
+assert luhn("123a") is False, "non-digit"
+print("ALL HIDDEN TESTS PASS")

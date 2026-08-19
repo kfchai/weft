@@ -1,0 +1,95 @@
+# EXIT-TEST submission — task: word-freq — verdict: PASS (no spec violations)
+# Notably correct capability handling: print_all takes Io as a parameter and
+# recurses, because lambdas can't capture capabilities [W33].
+# Observations: no \t escape exists so tabs can't be treated as whitespace;
+# no unary minus (agent wrote `0 - e.count`); sort_by stability unspecified.
+
+type Entry = {word: Text, count: Int}
+type TokState = {done: List[Text], cur: Text}
+
+# --- Pure helpers ---
+
+def is_space(c: Text) -> Bool = c == " " or c == "\n"
+
+def tokenize(t: Text) -> List[Text] = {
+  let st = fold(chars(t), {done: [], cur: ""}, (acc: TokState, c: Text) =>
+    if is_space(c)
+    then if text_len(acc.cur) > 0 then {done: append(acc.done, acc.cur), cur: ""} else acc
+    else {..acc, cur: acc.cur ++ c});
+  if text_len(st.cur) > 0 then append(st.done, st.cur) else st.done
+}
+
+def bump(entries: List[Entry], w: Text) -> List[Entry] =
+  match entries {
+    [] => [{word: w, count: 1}],
+    [e, ..rest] =>
+      if e.word == w
+      then [{..e, count: e.count + 1}] ++ rest
+      else [e] ++ bump(rest, w),
+  }
+
+def count_words(ws: List[Text]) -> List[Entry] =
+  fold(ws, [], (acc: List[Entry], w: Text) => bump(acc, w))
+
+def take[A](xs: List[A], n: Int) -> List[A] =
+  if n <= 0 then []
+  else match xs {
+    [] => [],
+    [x, ..rest] => [x] ++ take(rest, n - 1),
+  }
+
+def top_words(t: Text, n: Int) -> List[Text] = {
+  let entries = count_words(tokenize(to_lower(t)));
+  let ranked = sort_by(entries, (e: Entry) => 0 - e.count);
+  map(take(ranked, n), (e: Entry) => e.word)
+}
+
+# --- Effectful helpers ---
+
+def print_all(io: Io, ws: List[Text]) -> Unit =
+  match ws {
+    [] => unit,
+    [w, ..rest] => {
+      let _ = print(io, w);
+      print_all(io, rest)
+    },
+  }
+
+# --- Entry point ---
+
+def main(io: Io) -> Int = {
+  let f = fs(io);
+  match fs_read(f, "input.txt") {
+    Ok(content) => {
+      let _ = print_all(io, top_words(content, 3));
+      0
+    },
+    Err(e) => {
+      let _ = print(io, "error: could not read input.txt: " ++ e);
+      1
+    },
+  }
+}
+
+# --- Tests ---
+
+test "tokenize splits on spaces and newlines, dropping empties" =
+  tokenize("  hello world\nfoo  ") == ["hello", "world", "foo"]
+
+test "tokenize of empty text is empty" =
+  tokenize("") == []
+
+test "count_words counts occurrences preserving first-seen order" =
+  count_words(["a", "b", "a"]) == [{word: "a", count: 2}, {word: "b", count: 1}]
+
+test "top_words is case-insensitive and sorted by frequency" =
+  top_words("B a A c b a", 3) == ["a", "b", "c"]
+
+test "top_words returns at most n words" =
+  top_words("x y", 3) == ["x", "y"]
+
+test "take returns the first n elements" =
+  take([1, 2, 3, 4], 2) == [1, 2]
+
+test "take never exceeds n or the list length" (xs: List[Int], n: Int where n >= 0) =
+  len(take(xs, n)) <= n and len(take(xs, n)) <= len(xs)

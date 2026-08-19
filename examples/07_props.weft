@@ -1,0 +1,29 @@
+# Property tests [W35]: the runner invents inputs; the Bool must hold for all.
+# Randomness lives in the runner, so the language stays deterministic [W1].
+
+type Run = {ch: Text, n: Int}
+
+# Run-length encode a list of single-char Texts, by recursion on the head [W23].
+def rle(cs: List[Text]) -> List[Run] =
+  match cs {
+    [] => [],
+    [c, ..rest] =>
+      match rle(rest) {
+        [] => [{ch: c, n: 1}],
+        [first, ..tail] =>
+          if first.ch == c
+          then [{ch: c, n: first.n + 1}] ++ tail
+          else [{ch: c, n: 1}, first] ++ tail,
+      },
+  }
+
+def unrle(runs: List[Run]) -> List[Text] =
+  fold(runs, [], (acc: List[Text], r: Run) =>
+    acc ++ map(range(0, r.n), (i: Int) => r.ch))
+
+# Round-trip laws — the classic shape for property tests.
+test "reverse twice is identity" (xs: List[Int]) = reverse(reverse(xs)) == xs
+test "rle round-trips" (t: Text) = unrle(rle(chars(t))) == chars(t)
+test "rle compresses runs" = rle(["a", "a", "b"]) == [{ch: "a", n: 2}, {ch: "b", n: 1}]
+
+def main(io: Io) -> Int = 0
