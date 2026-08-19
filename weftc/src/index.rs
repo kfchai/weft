@@ -286,6 +286,10 @@ pub fn build_index(prog: &Program) -> Index {
 }
 
 pub fn skeleton(prog: &Program, src: &str) -> String {
+    skeleton_inner(prog, src, true)
+}
+
+fn skeleton_inner(prog: &Program, src: &str, include_tests: bool) -> String {
     let mut out = String::new();
     let total_lines = src.lines().count();
     let defs = prog.items.iter().filter(|i| matches!(i, Item::Def(_))).count();
@@ -303,9 +307,11 @@ pub fn skeleton(prog: &Program, src: &str) -> String {
                 out.push_str(&format!("L{:<4} {}{}\n", line, def_signature(d), doc));
             }
             Item::Test(t) => {
-                let (line, _) = line_col(src, t.span.start);
-                let kind = if t.params.is_empty() { "test" } else { "property test" };
-                out.push_str(&format!("L{:<4} {} \"{}\"\n", line, kind, t.name));
+                if include_tests {
+                    let (line, _) = line_col(src, t.span.start);
+                    let kind = if t.params.is_empty() { "test" } else { "property test" };
+                    out.push_str(&format!("L{:<4} {} \"{}\"\n", line, kind, t.name));
+                }
             }
         }
     }
@@ -360,8 +366,8 @@ pub fn ctx(prog: &Program, src: &str, targets: &[String]) -> Result<String, Stri
     out.push_str(&format!("# Context slice for: {}\n", targets.join(", ")));
     out.push_str("# Everything needed to modify these definitions. Signatures below are\n# complete and honest [W2]; trust them without reading further.\n\n");
 
-    out.push_str("## Program map (all signatures)\n\n");
-    out.push_str(&skeleton(prog, src));
+    out.push_str("## Program map (all signatures; tests omitted — relevant ones appear in full below)\n\n");
+    out.push_str(&skeleton_inner(prog, src, false));
 
     out.push_str("\n## Full definitions (targets + direct dependencies)\n\n```weft\n");
     let mut emitted_lines = 0usize;

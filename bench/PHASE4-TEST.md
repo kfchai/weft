@@ -69,3 +69,48 @@ independent agent and verified green before the test.
 
 Verdict: modify-unseen-code-from-a-slice works end to end; the exit test's
 one failure improved the tool, which is the failure mode you want.
+
+---
+
+# Scaled re-run (store grown to ~2.5k lines by three independent builders)
+
+## The change task (fixed 2026-08-20, before reading any round-B/C bodies)
+
+> Loyal customers return for free: when computing a refund for an Unwanted
+> return, the 10% restocking fee is waived entirely if the returning
+> customer's loyalty tier is Gold (the refund computation must take whatever
+> loyalty input the existing tier machinery needs). Defective returns are
+> unchanged. The Refund record's fee field must be 0 in the waived case.
+> Update any tests the change legitimately affects; add tests for: Gold
+> waives the fee, non-Gold still pays it, Defective unaffected by tier.
+
+Deliberately cross-domain: returns/refunds (built by round-B agent) must now
+consume loyalty tiers (built by round-A agent) — two builders who never saw
+each other's code. Targets to be picked from `weftc skeleton` output only.
+
+## Results — PASSED in ONE round (2026-08-20)
+
+Store scaled by three independent builder agents (append-only, each gated on
+green): 630 → 1290 → 1892 → **2468 lines, 182 defs, 234 tests**.
+
+- **Compression at scale**: ctx slice = **483 lines (19%) total; actual code
+  bodies 247 lines (10.0%)**. The bodies stay proportional to the task while
+  the signature map grows only linearly (~7:1 vs source). Measurement forced
+  one honest refinement: ctx's map no longer lists test names (234 lines of
+  pure overhead; relevant tests ship in full anyway).
+- **The subject** (fresh agent, spec + slice only, never saw the file) chose
+  the strongest available design: tier-aware `*_for` variants with the
+  original four functions delegating at Bronze — making it *impossible by
+  construction* for any unseen caller or test to break. It wired returns
+  (round-B builder) to loyalty tiers (round-A builder) — two authors who
+  never saw each other's code — including ledger integration via
+  `customer_tier` and an end-to-end place→return→restock test.
+- **Grade: 243/243** (all 234 pre-existing tests + 9 new incl. 3 property
+  tests) — first splice, zero repair rounds. The small-scale run's one
+  failure (tests-via-callers missing from ctx) did not recur: the tool fix
+  from that round demonstrably paid off.
+
+Roadmap claim status: "modify ~3 definitions of a multi-kiloline unseen
+codebase loading ~15% of the code" — **met** on the bodies-loaded metric
+(10.0%) and near-met on total context (19%, map included). The map fraction
+shrinks further as codebases grow, since bodies scale with the task.
