@@ -1,0 +1,34 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  corpus:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build weftc
+        run: cargo build --release --manifest-path weftc/Cargo.toml
+
+      - name: Corpus tests (examples + exit-test + store)
+        run: ./weftc/target/release/weftc test examples/*.weft exit-test/*.weft store/orderflow.weft
+
+      - name: Checker rejects rule violations
+        run: |
+          printf 'def leak(io: Io) -> Io = io\ndef main(io: Io) -> Int = 0\n' > /tmp/bad.weft
+          if ./weftc/target/release/weftc check /tmp/bad.weft; then
+            echo "checker accepted a W33 violation"; exit 1
+          fi
+          echo "correctly rejected"
+
+      - name: Index commands smoke test
+        run: |
+          ./weftc/target/release/weftc skeleton store/orderflow.weft > /dev/null
+          ./weftc/target/release/weftc graph store/orderflow.weft > /dev/null
+          ./weftc/target/release/weftc ctx store/orderflow.weft price_cart > /dev/null
