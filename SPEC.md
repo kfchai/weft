@@ -73,10 +73,14 @@ Everything below the top level is an expression.
 
 ## 7. Capabilities
 
-- **[W30]** Capability types: `Io` (root), `Fs` (files), `Rand` (randomness), `Clock` (time). Capability values cannot be created in Weft; the runtime passes the single `Io` to `main`.
-- **[W31]** Child capabilities derive from Io via stdlib: `fs(io)`, `rand(io)`, `clock(io)`.
+- **[W30]** Capability types: `Io` (root), `Fs` (files), `Rand` (randomness), `Clock` (time), `Model` (language-model calls). Capability values cannot be created in Weft; the runtime passes the single `Io` to `main`.
+- **[W31]** Child capabilities derive from Io via stdlib: `fs(io)`, `rand(io)`, `clock(io)`, `model(io)`.
 - **[W32]** Every effectful stdlib function takes a capability as its first argument (`print(io, t)`, `fs_read(f, path)`). A function that performs an effect must therefore receive a capability through its parameters — making the signature a complete effect statement.
 - **[W33]** A capability may be: received as a parameter, passed as an argument, or let-bound in a block. It may **not** be placed in records, variants, lists, Options, or Results, may not be returned from a `def` (the stdlib derivations `fs`, `rand`, `clock` are the sole capability-returning functions), and may not be captured by a lambda. Violations are compile errors.
+
+## 7b. Model calls
+
+- **[W43]** `infer name(m: Model, p: T, ...) -> Result[U, Text] = expr` declares a model-backed function. The body is a pure Text expression (parameters in scope) that evaluates to a prompt. Calling the def sends the prompt to the ambient model and reads the reply as a Weft literal of type `U`, checked structurally — including any type invariants [W42], so a reply violating an invariant is rejected. Every failure (no model configured, unparseable or ill-typed reply) is the `Err` case, never a crash. An infer def must take a `Model` parameter [W2] and cannot have type parameters; the reply is a literal only — it cannot name or call anything in the program.
 
 ## 8. Tests
 

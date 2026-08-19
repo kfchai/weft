@@ -51,6 +51,8 @@ pub struct Interp {
     const_cache: HashMap<String, Value>,
     /// nominal type name -> invariant expression [W42]
     invariants: HashMap<String, Expr>,
+    /// all type declarations, for model-reply validation [W43]
+    typedefs: HashMap<String, TypeDef>,
     prng: u64,
 }
 
@@ -68,6 +70,7 @@ impl Interp {
         let mut defs = HashMap::new();
         let mut consts = HashMap::new();
         let mut invariants = HashMap::new();
+        let mut typedefs = HashMap::new();
         for item in &prog.items {
             match item {
                 Item::Def(d) => {
@@ -81,11 +84,12 @@ impl Interp {
                     if let TypeDecl::Nominal { invariant, .. } = &td.decl {
                         invariants.insert(td.name.clone(), invariant.clone());
                     }
+                    typedefs.insert(td.name.clone(), td.clone());
                 }
                 Item::Test(_) => {}
             }
         }
-        Interp { defs, consts, const_cache: HashMap::new(), invariants, prng: 0x9E37_79B9_7F4A_7C15 }
+        Interp { defs, consts, const_cache: HashMap::new(), invariants, typedefs, prng: 0x9E37_79B9_7F4A_7C15 }
     }
 
     // ---------- entry points ----------
@@ -303,10 +307,235 @@ impl Interp {
                 }
             }
         }
+        if d.is_infer {
+            // [W43]: the body is the prompt; the call goes to the model
+            let prompt = match self.eval(&d.body, &mut env) {
+                Ok(Value::Text(t)) => t,
+                Ok(other) => {
+                    return Err(halt("W43", format!("infer body produced a non-Text: {}", show(&other)), d.span))
+                }
+                Err(Flow::Ret(v)) => return Ok(v),
+                Err(h) => return Err(h),
+            };
+            return Ok(self.model_call(d, &prompt));
+        }
         match self.eval(&d.body, &mut env) {
             Ok(v) => Ok(v),
             Err(Flow::Ret(v)) => Ok(v), // `?` early return lands here [W26]
             Err(h) => Err(h),
+        }
+    }
+
+    // ---------- model calls [W43] ----------
+
+    fn model_call(&mut self, d: &Def, prompt: &str) -> Value {
+        let err_val = |m: String| Value::Ctor("Err".into(), vec![Value::Text(m)]);
+        let ok_ty = match &d.ty {
+            TypeExpr::Name(n, args, _) if n == "Result" && args.len() == 2 => args[0].clone(),
+            _ => return err_val("infer return type is not Result".into()),
+        };
+        let full = self.build_model_prompt(prompt, &ok_ty);
+        let mut feedback: Option<String> = None;
+        for _ in 0..2 {
+            let p = match &feedback {
+                Some(f) => format!(
+                    "{}\n\nYour previous reply was invalid: {}\nReply again with ONLY the literal.",
+                    full, f
+                ),
+                None => full.clone(),
+            };
+            let reply = match invoke_model(&p) {
+                Ok(r) => r,
+                Err(e) => return err_val(format!("model: {}", e)),
+            };
+            match self.parse_reply(&reply, &ok_ty) {
+                Ok(v) => return Value::Ctor("Ok".into(), vec![v]),
+                Err(e) => feedback = Some(e),
+            }
+        }
+        err_val(format!("model: invalid reply: {}", feedback.unwrap_or_default()))
+    }
+
+    /// Prompt + the expected type + the definitions of every user type it uses.
+    fn build_model_prompt(&self, prompt: &str, ok_ty: &TypeExpr) -> String {
+        let mut reachable: Vec<String> = Vec::new();
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        self.collect_reachable(ok_ty, &mut seen, &mut reachable);
+        let mut out = String::new();
+        out.push_str(prompt);
+        out.push_str("\n\nReply with ONLY a Weft literal value of this type — no prose, no code fences:\n  ");
+        out.push_str(&crate::index::type_text(ok_ty));
+        if !reachable.is_empty() {
+            out.push_str("\n\nType definitions:\n");
+            for name in &reachable {
+                if let Some(td) = self.typedefs.get(name) {
+                    out.push_str("  ");
+                    out.push_str(&crate::index::typedef_text(td));
+                    out.push('\n');
+                }
+            }
+        }
+        out.push_str("\nLiteral syntax: records {field: value}, named records Name{field: value}, variants Name(args) or bare Name, lists [a, b], text \"quoted\", Some(x)/None, Ok(x)/Err(e), negative numbers -n.");
+        out
+    }
+
+    fn collect_reachable(&self, te: &TypeExpr, seen: &mut std::collections::HashSet<String>, out: &mut Vec<String>) {
+        match te {
+            TypeExpr::Name(n, args, _) => {
+                for a in args {
+                    self.collect_reachable(a, seen, out);
+                }
+                if let Some(td) = self.typedefs.get(n) {
+                    if seen.insert(n.clone()) {
+                        out.push(n.clone());
+                        match &td.decl {
+                            TypeDecl::Alias(inner) => self.collect_reachable(inner, seen, out),
+                            TypeDecl::Variants(vs) => {
+                                for v in vs {
+                                    for p in &v.payload {
+                                        self.collect_reachable(p, seen, out);
+                                    }
+                                }
+                            }
+                            TypeDecl::Nominal { fields, .. } => {
+                                for (_, t) in fields {
+                                    self.collect_reachable(t, seen, out);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            TypeExpr::Record(fields, _) => {
+                for (_, t) in fields {
+                    self.collect_reachable(t, seen, out);
+                }
+            }
+            TypeExpr::Fn(args, ret, _) => {
+                for a in args {
+                    self.collect_reachable(a, seen, out);
+                }
+                self.collect_reachable(ret, seen, out);
+            }
+        }
+    }
+
+    /// Parse a model reply as a literal of the expected type: lex, parse,
+    /// literal-only check, evaluate (invariants run here [W42]), fit check.
+    fn parse_reply(&mut self, reply: &str, ok_ty: &TypeExpr) -> Result<Value, String> {
+        let mut text = reply.trim();
+        // tolerate a fenced reply despite instructions
+        if text.starts_with("```") {
+            text = text.trim_start_matches("```").trim_start_matches("weft").trim();
+            if let Some(end) = text.rfind("```") {
+                text = text[..end].trim();
+            }
+        }
+        let toks = crate::lexer::lex(text).map_err(|d| format!("lex error: {}", d.message))?;
+        let mut p = crate::parser::Parser::new(toks);
+        let expr = p.parse_expr().map_err(|d| format!("parse error: {}", d.message))?;
+        if !p.at_eof() {
+            return Err("trailing content after the literal".into());
+        }
+        if !literal_only(&expr) {
+            return Err("reply must be a pure literal (no names, calls, or operators)".into());
+        }
+        let mut env = Vec::new();
+        let v = match self.eval(&expr, &mut env) {
+            Ok(v) => v,
+            Err(Flow::Halt(e)) => return Err(format!("[{}] {}", e.diag.rule, e.diag.message)),
+            Err(Flow::Ret(_)) => return Err("invalid literal".into()),
+        };
+        self.fits(&v, ok_ty)?;
+        Ok(v)
+    }
+
+    /// Structural check: does the value have the declared type?
+    fn fits(&self, v: &Value, te: &TypeExpr) -> Result<(), String> {
+        let fail = |exp: &str, v: &Value| Err(format!("expected {}, got {}", exp, show(v)));
+        match te {
+            TypeExpr::Record(fields, _) => match v {
+                Value::Rec(fs) => {
+                    if fs.len() != fields.len() {
+                        return fail(&crate::index::type_text(te), v);
+                    }
+                    let mut sorted: Vec<&(String, TypeExpr)> = fields.iter().collect();
+                    sorted.sort_by(|a, b| a.0.cmp(&b.0));
+                    for ((fname, fty), (vname, vv)) in sorted.iter().zip(fs.iter()) {
+                        if fname != vname {
+                            return fail(&crate::index::type_text(te), v);
+                        }
+                        self.fits(vv, fty)?;
+                    }
+                    Ok(())
+                }
+                _ => fail(&crate::index::type_text(te), v),
+            },
+            TypeExpr::Fn(_, _, _) => Err("a model cannot produce a function value".into()),
+            TypeExpr::Name(n, args, _) => match (n.as_str(), args.len()) {
+                ("Int", 0) => matches!(v, Value::Int(_)).then_some(()).ok_or_else(|| format!("expected Int, got {}", show(v))),
+                ("Float", 0) => matches!(v, Value::Float(_)).then_some(()).ok_or_else(|| format!("expected Float, got {}", show(v))),
+                ("Bool", 0) => matches!(v, Value::Bool(_)).then_some(()).ok_or_else(|| format!("expected Bool, got {}", show(v))),
+                ("Text", 0) => matches!(v, Value::Text(_)).then_some(()).ok_or_else(|| format!("expected Text, got {}", show(v))),
+                ("Unit", 0) => matches!(v, Value::Unit).then_some(()).ok_or_else(|| format!("expected Unit, got {}", show(v))),
+                ("List", 1) => match v {
+                    Value::List(items) => {
+                        for it in items {
+                            self.fits(it, &args[0])?;
+                        }
+                        Ok(())
+                    }
+                    _ => fail("a List", v),
+                },
+                ("Option", 1) => match v {
+                    Value::Ctor(c, payload) if c == "Some" && payload.len() == 1 => self.fits(&payload[0], &args[0]),
+                    Value::Ctor(c, payload) if c == "None" && payload.is_empty() => Ok(()),
+                    _ => fail("an Option", v),
+                },
+                ("Result", 2) => match v {
+                    Value::Ctor(c, payload) if c == "Ok" && payload.len() == 1 => self.fits(&payload[0], &args[0]),
+                    Value::Ctor(c, payload) if c == "Err" && payload.len() == 1 => self.fits(&payload[0], &args[1]),
+                    _ => fail("a Result", v),
+                },
+                _ => match self.typedefs.get(n) {
+                    Some(td) => match &td.decl {
+                        TypeDecl::Alias(inner) => self.fits(v, inner),
+                        TypeDecl::Variants(vs) => match v {
+                            Value::Ctor(cname, payload) => match vs.iter().find(|vd| &vd.name == cname) {
+                                Some(vd) => {
+                                    if payload.len() != vd.payload.len() {
+                                        return fail(n, v);
+                                    }
+                                    for (pv, pt) in payload.iter().zip(vd.payload.iter()) {
+                                        self.fits(pv, pt)?;
+                                    }
+                                    Ok(())
+                                }
+                                None => fail(n, v),
+                            },
+                            _ => fail(n, v),
+                        },
+                        TypeDecl::Nominal { fields, .. } => match v {
+                            Value::Rec(fs) => {
+                                if fs.len() != fields.len() {
+                                    return fail(n, v);
+                                }
+                                let mut sorted: Vec<&(String, TypeExpr)> = fields.iter().collect();
+                                sorted.sort_by(|a, b| a.0.cmp(&b.0));
+                                for ((fname, fty), (vname, vv)) in sorted.iter().zip(fs.iter()) {
+                                    if fname != vname {
+                                        return fail(n, v);
+                                    }
+                                    self.fits(vv, fty)?;
+                                }
+                                Ok(())
+                            }
+                            _ => fail(n, v),
+                        },
+                    },
+                    None => Err(format!("unknown type `{}` in infer return", n)),
+                },
+            },
         }
     }
 
@@ -884,6 +1113,7 @@ impl Interp {
             ("fs", 1) => Value::Cap("Fs".into()),
             ("rand", 1) => Value::Cap("Rand".into()),
             ("clock", 1) => Value::Cap("Clock".into()),
+            ("model", 1) => Value::Cap("Model".into()),
             ("fs_read", 2) => match (arg!(0), arg!(1)) {
                 (Value::Cap(_), Value::Text(path)) => match std::fs::read_to_string(&path) {
                     Ok(content) => Value::Ctor("Ok".into(), vec![Value::Text(content)]),
@@ -998,6 +1228,52 @@ fn values_eq(a: &Value, b: &Value) -> bool {
     }
 }
 
+/// A model reply may only be a literal tree: no names, calls, or control flow.
+fn literal_only(e: &Expr) -> bool {
+    match &e.kind {
+        ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Bool(_) | ExprKind::Text(_) | ExprKind::Unit => true,
+        ExprKind::NegOp(inner) => literal_only(inner),
+        ExprKind::List(es) => es.iter().all(literal_only),
+        ExprKind::Ctor(_, args) => args.iter().all(literal_only),
+        ExprKind::Record { spread: None, fields } => fields.iter().all(|(_, v)| literal_only(v)),
+        ExprKind::NamedRec { spread: None, fields, .. } => fields.iter().all(|(_, v)| literal_only(v)),
+        _ => false,
+    }
+}
+
+/// Run the configured model command (WEFT_MODEL_CMD), prompt on stdin,
+/// reply on stdout.
+fn invoke_model(prompt: &str) -> Result<String, String> {
+    let cmd = std::env::var("WEFT_MODEL_CMD")
+        .map_err(|_| "no model configured (set WEFT_MODEL_CMD to a command reading a prompt on stdin)".to_string())?;
+    let mut child = if cfg!(windows) {
+        std::process::Command::new("cmd")
+            .args(["/C", &cmd])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+    } else {
+        std::process::Command::new("sh")
+            .args(["-c", &cmd])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+    }
+    .map_err(|e| format!("cannot start `{}`: {}", cmd, e))?;
+    if let Some(stdin) = child.stdin.as_mut() {
+        let _ = stdin.write_all(prompt.as_bytes());
+    }
+    drop(child.stdin.take());
+    let out = child.wait_with_output().map_err(|e| format!("model command failed: {}", e))?;
+    if !out.status.success() {
+        let err = String::from_utf8_lossy(&out.stderr);
+        return Err(format!("model command exited nonzero: {}", err.chars().take(200).collect::<String>()));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).to_string())
+}
+
 fn show_float(f: f64) -> String {
     let s = format!("{}", f);
     if s.contains('.') || s.contains('e') || s.contains("inf") || s.contains("NaN") {
@@ -1036,12 +1312,12 @@ pub fn show(v: &Value) -> String {
 }
 
 fn is_builtin(name: &str) -> bool {
-    const NAMES: [&str; 40] = [
+    const NAMES: [&str; 41] = [
         "text_len", "text_of_int", "text_of_float", "text_of_bool", "int_of_text", "split", "join",
         "contains", "chars", "to_upper", "to_lower", "trim", "len", "list_get", "append", "map",
         "filter", "fold", "range", "reverse", "sort_by", "zip", "find", "index_of", "unwrap_or",
         "ok_or", "abs", "min", "max", "int_to_float", "float_to_int", "print", "read_line", "fs",
-        "fs_read", "fs_write", "rand", "rand_int", "clock", "now_ms",
+        "fs_read", "fs_write", "rand", "rand_int", "clock", "now_ms", "model",
     ];
     NAMES.contains(&name)
 }

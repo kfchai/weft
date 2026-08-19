@@ -1,0 +1,37 @@
+# Model calls [W43]: a prompt is a typed function. The reply must parse as a
+# Weft literal of the declared type — and [W42] invariants run on it, so a
+# model cannot hand back a value your business rules forbid.
+# Configure with WEFT_MODEL_CMD (a command reading the prompt on stdin).
+
+type Sentiment = Positive | Negative | Neutral
+
+# The body is a pure Text expression: interpolate arguments as you like.
+infer classify(m: Model, msg: Text) -> Result[Sentiment, Text] =
+  "Classify the sentiment of this customer message: " ++ msg
+
+# A nominal type with an invariant — the model's reply is rejected at the
+# boundary if stars is out of range, before any code sees it.
+type Rating = {stars: Int, summary: Text} where stars >= 1 and stars <= 5
+
+infer rate_review(m: Model, review: Text) -> Result[Rating, Text] =
+  "Rate this product review from 1 to 5 stars with a one-phrase summary: " ++ review
+
+def sentiment_name(s: Sentiment) -> Text =
+  match s {
+    Positive => "positive",
+    Negative => "negative",
+    Neutral => "neutral",
+  }
+
+# Tests stay pure [W36]; model calls are exercised via `weftc run`.
+def main(io: Io) -> Int = {
+  let m = model(io);
+  let code = match classify(m, "I love this teapot - it pours perfectly!") {
+    Ok(s) => { let _ = print(io, "sentiment: " ++ sentiment_name(s)); 0 },
+    Err(e) => { let _ = print(io, "classify failed: " ++ e); 1 },
+  };
+  match rate_review(m, "Decent kettle. Heats slowly but looks great.") {
+    Ok(r) => { let _ = print(io, "stars: " ++ text_of_int(r.stars) ++ " - " ++ r.summary); code },
+    Err(e) => { let _ = print(io, "rating failed: " ++ e); 1 },
+  }
+}

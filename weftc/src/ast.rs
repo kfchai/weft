@@ -51,6 +51,8 @@ pub struct Def {
     /// Return type for functions; declared type for constants
     pub ty: TypeExpr,
     pub body: Expr,
+    /// model-backed def [W43]: body is the prompt, call goes to the model
+    pub is_infer: bool,
     pub span: Span,
 }
 

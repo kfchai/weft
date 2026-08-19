@@ -78,7 +78,7 @@ pub struct Checker {
     holes: Vec<(String, usize, Span)>, // name, var index, span
 }
 
-const CAPS: [&str; 4] = ["Io", "Fs", "Rand", "Clock"];
+const CAPS: [&str; 5] = ["Io", "Fs", "Rand", "Clock", "Model"];
 
 pub fn check_program(prog: &Program) -> CheckResult {
     let mut c = Checker {
@@ -432,6 +432,29 @@ impl Checker {
                             let _ = ct;
                         }
                     }
+                }
+                // infer defs [W43]: Model param required, Result[_, Text] return,
+                // body is the prompt Text
+                if d.is_infer {
+                    let has_model = scheme.params.iter().any(|t| matches!(t, Ty::Cap(c) if c == "Model"));
+                    if !has_model {
+                        self.diags.push(
+                            Diag::new("W43", format!("infer `{}` must take a Model parameter", d.name), d.span)
+                                .hint("add `m: Model` and derive it with `model(io)`"),
+                        );
+                    }
+                    let ret_ok = matches!(&scheme.ret, Ty::Res(_, e) if matches!(**e, Ty::Text));
+                    if !ret_ok {
+                        self.diags.push(
+                            Diag::new("W43", format!("infer `{}` must return Result[U, Text]", d.name), d.span)
+                                .actual(self.show(&scheme.ret))
+                                .hint("model calls can always fail; the Err case is Text"),
+                        );
+                    }
+                    self.infer(&d.body, Some(&Ty::Text));
+                    self.cur_ret = None;
+                    self.cur_tparams.clear();
+                    return;
                 }
                 let ret = scheme.ret.clone();
                 self.infer(&d.body, Some(&ret));
@@ -1595,6 +1618,7 @@ fn builtin_sigs() -> HashMap<String, Scheme> {
     add("rand_int", &[], vec![cap("Rand"), Ty::Int, Ty::Int], Ty::Int);
     add("clock", &[], vec![cap("Io")], cap("Clock"));
     add("now_ms", &[], vec![cap("Clock")], Ty::Int);
+    add("model", &[], vec![cap("Io")], cap("Model"));
 
     m
 }

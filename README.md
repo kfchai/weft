@@ -97,7 +97,7 @@ Examples: 01 hello · 02 fizzbuzz · 03 variants+records · 04 generics ·
 - **Phase 2** — agent-loop harness + iteration benchmark vs Python — **pilot done** (zero fluency penalty at all tested difficulty; small-model repair loop closes in 1 round/failure)
 - **Phase 3** — contracts, invariants [W42], property-test runner — **done** (folded into 1 & spec v0.2)
 - **Phase 4** — compiler-derived index: `skeleton` / `graph` / `ctx` — **done** (exit test passed: unseen 630-line codebase modified from a 35% slice); content-addressed store deferred
-- **Phase 5** — `infer` functions (LLM calls as typed primitives) — deferred
+- **Phase 5** — `infer` functions (LLM calls as typed primitives) — **done** ([W43]: prompts are typed defs behind a `Model` capability; replies parse as Weft literals and [W42] invariants reject rule-violating model output at the boundary; verified against the real Claude CLI)
 
 Deliberately out of scope: native codegen, package manager, human-ergonomics
 work, IDE plugins. The "IDE" is the agent harness.

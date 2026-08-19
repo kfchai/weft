@@ -75,6 +75,10 @@ impl Parser {
         }
     }
 
+    pub fn at_eof(&self) -> bool {
+        matches!(self.peek(), Tok::Eof)
+    }
+
     // ---- program ----
 
     pub fn parse_program(&mut self) -> PResult<Program> {
@@ -83,13 +87,14 @@ impl Parser {
             match self.peek() {
                 Tok::Eof => break,
                 Tok::Type => items.push(Item::TypeDef(self.parse_typedef()?)),
-                Tok::Def => items.push(Item::Def(self.parse_def()?)),
+                Tok::Def => items.push(Item::Def(self.parse_def(false)?)),
+                Tok::Infer => items.push(Item::Def(self.parse_def(true)?)),
                 Tok::Test => items.push(Item::Test(self.parse_test()?)),
                 _ => {
                     return Err(Diag::new(
                         "W7",
                         format!(
-                            "expected a top-level form (`type`, `def`, or `test`), found {}",
+                            "expected a top-level form (`type`, `def`, `infer`, or `test`), found {}",
                             describe(self.peek())
                         ),
                         self.span(),
@@ -178,13 +183,16 @@ impl Parser {
 
     // ---- defs ----
 
-    fn parse_def(&mut self) -> PResult<Def> {
+    fn parse_def(&mut self, is_infer: bool) -> PResult<Def> {
         let start = self.span();
-        self.bump(); // `def`
+        self.bump(); // `def` / `infer`
         let name = self.expect_ident("a definition name (snake_case)", "W16")?;
 
         let mut tparams = Vec::new();
         if self.eat(&Tok::LBracket) {
+            if is_infer {
+                return Err(Diag::new("W43", "infer defs cannot have type parameters", start));
+            }
             loop {
                 tparams.push(self.expect_upper("a type parameter", "W13")?);
                 if !self.eat(&Tok::Comma) {
@@ -196,6 +204,9 @@ impl Parser {
 
         if self.eat(&Tok::Colon) {
             // constant: `def name: T = expr`
+            if is_infer {
+                return Err(Diag::new("W43", "infer defs must take parameters", start));
+            }
             if !tparams.is_empty() {
                 return Err(Diag::new("W16", "constants cannot have type parameters", start));
             }
@@ -208,6 +219,7 @@ impl Parser {
                 params: None,
                 ty,
                 body,
+                is_infer: false,
                 span: start.merge(self.prev_span()),
             });
         }
@@ -233,6 +245,7 @@ impl Parser {
             params: Some(params),
             ty,
             body,
+            is_infer,
             span: start.merge(self.prev_span()),
         })
     }
@@ -944,6 +957,7 @@ fn describe(tok: &Tok) -> String {
         Tok::Hole(n) => format!("hole `?{}`", n),
         Tok::Eof => "end of file".to_string(),
         Tok::Def => "`def`".to_string(),
+        Tok::Infer => "`infer`".to_string(),
         Tok::Type => "`type`".to_string(),
         Tok::Test => "`test`".to_string(),
         Tok::Let => "`let`".to_string(),

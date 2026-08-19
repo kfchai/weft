@@ -13,6 +13,7 @@ pub enum Tok {
 
     // keywords
     Def,
+    Infer,
     Type,
     Test,
     Let,
@@ -114,6 +115,7 @@ pub fn lex(src: &str) -> Result<Vec<Token>, Diag> {
             let word: String = bytes[start..i].iter().collect();
             let tok = match word.as_str() {
                 "def" => Tok::Def,
+                "infer" => Tok::Infer,
                 "type" => Tok::Type,
                 "test" => Tok::Test,
                 "let" => Tok::Let,
