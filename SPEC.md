@@ -76,7 +76,7 @@ Everything below the top level is an expression.
 - **[W30]** Capability types: `Io` (root), `Fs` (files), `Rand` (randomness), `Clock` (time), `Model` (language-model calls). Capability values cannot be created in Weft; the runtime passes the single `Io` to `main`.
 - **[W31]** Child capabilities derive from Io via stdlib: `fs(io)`, `rand(io)`, `clock(io)`, `model(io)`.
 - **[W32]** Every effectful stdlib function takes a capability as its first argument (`print(io, t)`, `fs_read(f, path)`). A function that performs an effect must therefore receive a capability through its parameters — making the signature a complete effect statement.
-- **[W33]** A capability may be: received as a parameter, passed as an argument, or let-bound in a block. It may **not** be placed in records, variants, lists, Options, or Results, may not be returned from a `def` (the stdlib derivations `fs`, `rand`, `clock` are the sole capability-returning functions), and may not be captured by a lambda. Violations are compile errors.
+- **[W33]** A capability may be: received as a parameter, passed as an argument, or let-bound in a block. It may **not** be placed in records, variants, lists, Options, or Results, may not be returned from a `def` (the stdlib derivations `fs`, `rand`, `clock`, `model` are the sole capability-returning functions), and may not be captured by a lambda. Violations are compile errors.
 
 ## 7b. Model calls
 
