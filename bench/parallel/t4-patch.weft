@@ -1,0 +1,50 @@
+# The amount a card can pay toward a total: nothing under the 500c minimum,
+# otherwise the smaller of balance and total.
+def card_spend(card: GiftCard, total_cents: Int where total_cents >= 0) -> Int =
+  if total_cents < 500 then 0 else min(card.balance_cents, total_cents)
+
+# Whether a card fully covers a total on its own; totals under 500c are never covered.
+def card_covers(card: GiftCard, total_cents: Int where total_cents >= 0) -> Bool =
+  total_cents >= 500 and card.balance_cents >= total_cents
+
+# Whether the card can pay anything at all toward this total.
+def card_usable(card: GiftCard, total_cents: Int where total_cents >= 0) -> Bool =
+  card_spend(card, total_cents) > 0
+
+test "small totals block the gift card" = {
+  let card = issue_gift_card("GC-S", 10000);
+  card_spend(card, 499) == 0
+    and card_spend(card, 0) == 0
+    and not card_covers(card, 499)
+    and not card_covers(card, 0)
+}
+
+test "the gift card minimum starts at exactly 500 cents" = {
+  let card = issue_gift_card("GC-B", 10000);
+  card_spend(card, 499) == 0
+    and card_spend(card, 500) == 500
+    and not card_covers(card, 499)
+    and card_covers(card, 500)
+}
+
+test "large totals are unaffected by the card minimum" = {
+  let card = issue_gift_card("GC-L", 2000);
+  card_spend(card, 5000) == 2000
+    and card_spend(card, 1500) == 1500
+    and card_covers(card, 1500)
+    and not card_covers(card, 5000)
+}
+
+test "card_usable says whether the card can pay anything" = {
+  let funded = issue_gift_card("GC-U", 2000);
+  let empty = issue_gift_card("GC-0", 0);
+  card_usable(funded, 500)
+    and card_usable(funded, 100000)
+    and not card_usable(funded, 499)
+    and not card_usable(empty, 5000)
+}
+
+test "covering a total implies the card is usable" (t: Int where t >= 0 and t < 10000000, b: Int where b >= 0 and b < 10000000) = {
+  let card = issue_gift_card("P", b);
+  not card_covers(card, t) or card_usable(card, t)
+}

@@ -5,6 +5,7 @@ mod eval;
 mod index;
 mod lexer;
 mod parser;
+mod splice;
 
 use std::process::ExitCode;
 
@@ -125,6 +126,70 @@ fn real_main() -> u8 {
             if all_passed { 0 } else { 1 }
         }
         "repair-context" => repair_context(files[0]),
+        "splice" => {
+            if files.len() < 2 {
+                eprintln!("usage: weftc splice <base.weft> <patch.weft>... [--write]");
+                return 2;
+            }
+            let write = args.iter().any(|a| a == "--write");
+            let base_path = files[0];
+            let (base_src, base_prog) = match load_ast(base_path) {
+                Some(x) => x,
+                None => return 1,
+            };
+            let mut patches = Vec::new();
+            for p in &files[1..] {
+                match load_ast(p) {
+                    Some((src, prog)) => patches.push(splice::Patch {
+                        label: std::path::Path::new(p.as_str())
+                            .file_stem()
+                            .map(|s| s.to_string_lossy().to_string())
+                            .unwrap_or_else(|| p.to_string()),
+                        src,
+                        prog,
+                    }),
+                    None => return 1,
+                }
+            }
+            match splice::splice(&base_src, &base_prog, &patches) {
+                Ok(m) => {
+                    if !m.signature_changes.is_empty() {
+                        eprintln!(
+                            "warning: {} replacement(s) change a definition's signature; callers outside the patch may break:",
+                            m.signature_changes.len()
+                        );
+                        for c in &m.signature_changes {
+                            eprintln!("{}", c);
+                        }
+                    }
+                    if write {
+                        if let Err(e) = std::fs::write(base_path, &m.text) {
+                            eprintln!("cannot write {}: {}", base_path, e);
+                            return 1;
+                        }
+                        println!(
+                            "spliced into {}: {} replaced, {} added",
+                            base_path,
+                            m.replaced.len(),
+                            m.added.len()
+                        );
+                        for k in &m.replaced {
+                            println!("  ~ {}", k);
+                        }
+                        for k in &m.added {
+                            println!("  + {}", k);
+                        }
+                    } else {
+                        print!("{}", m.text);
+                    }
+                    0
+                }
+                Err(e) => {
+                    eprintln!("{}", e);
+                    1
+                }
+            }
+        }
         "skeleton" | "graph" | "ctx" => {
             let file = files[0];
             let src = match std::fs::read_to_string(file) {
@@ -294,6 +359,32 @@ fn source_excerpt(src: &str, span: diag::Span) -> String {
         out.push_str(&format!("{} {:>4} | {}\n", marker, n, lines[n - 1]));
     }
     out
+}
+
+/// Parse only (no typecheck) — enough for source-level tooling.
+fn load_ast(path: &str) -> Option<(String, ast::Program)> {
+    let src = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{}: cannot read: {}", path, e);
+            return None;
+        }
+    };
+    let toks = match lexer::lex(&src) {
+        Ok(t) => t,
+        Err(d) => {
+            eprintln!("{}", d.render_human(&src, path));
+            return None;
+        }
+    };
+    let mut p = parser::Parser::new(toks);
+    match p.parse_program() {
+        Ok(prog) => Some((src, prog)),
+        Err(d) => {
+            eprintln!("{}", d.render_human(&src, path));
+            None
+        }
+    }
 }
 
 /// Parse + typecheck; returns the program only if it is clean (holes allowed).

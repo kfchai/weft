@@ -16,8 +16,13 @@ jobs:
       - name: Build weftc
         run: cargo build --release --manifest-path weftc/Cargo.toml
 
-      - name: Corpus tests (examples + exit-test + store)
-        run: ./weftc/target/release/weftc test examples/*.weft exit-test/*.weft store/orderflow.weft
+      - name: Corpus tests (examples + exit-test + store + games)
+        run: ./weftc/target/release/weftc test examples/*.weft exit-test/*.weft store/orderflow.weft games/*.weft
+
+      - name: Play a scripted game (invaders runs to an ending)
+        run: |
+          for i in $(seq 1 300); do echo f; done > /tmp/moves.txt
+          ./weftc/target/release/weftc run games/invaders.weft < /tmp/moves.txt | tail -3
 
       - name: Checker rejects rule violations
         run: |

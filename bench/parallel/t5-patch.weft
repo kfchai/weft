@@ -1,0 +1,31 @@
+# Percent growth from prev to cur in integer math, rounded toward zero to a multiple of 5; growth from zero counts as zero.
+def growth_percent(prev: Int where prev >= 0, cur: Int where cur >= 0) -> Int =
+  if prev == 0 then 0 else {
+    let raw = (cur - prev) * 100 / prev;
+    raw - raw % 5
+  }
+
+# Render a growth percent as an approximation with an explicit sign, e.g. "about +50%", "about -25%", "about 0%".
+def growth_label(p: Int) -> Text =
+  if p > 0 then "about +" ++ text_of_int(p) ++ "%" else "about " ++ text_of_int(p) ++ "%"
+
+test "growth percent uses integer math" =
+  growth_percent(300, 400) == 30 and growth_percent(400, 300) == -25
+
+test "growth percent rounds down to a multiple of five" =
+  growth_percent(100, 123) == 20 and growth_percent(100, 107) == 5
+
+test "growth percent rounds a negative value toward zero" =
+  growth_percent(100, 77) == -20 and growth_percent(100, 93) == -5
+
+test "growth percent leaves exact multiples of five alone" =
+  growth_percent(100, 150) == 50 and growth_percent(100, 80) == -20
+
+test "growth percent is always a multiple of five" (p: Int where p >= 0 and p < 1000000, c: Int where c >= 0 and c < 1000000) =
+  growth_percent(p, c) % 5 == 0
+
+test "growth label signs the percent" =
+  growth_label(50) == "about +50%" and growth_label(-25) == "about -25%" and growth_label(0) == "about 0%"
+
+test "growth label is approximate" =
+  growth_label(20) == "about +20%" and growth_label(-20) == "about -20%"

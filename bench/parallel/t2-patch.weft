@@ -1,0 +1,51 @@
+# Whether a bundle clears the offer bar: it must save at least 200 cents.
+def bundle_worth_offering(b: Bundle) -> Bool =
+  savings_or_zero(b) >= 200
+
+# The best applicable bundle for a cart, ignoring any bundle that does not
+# clear the 200c savings bar: max savings, ties to the first listed.
+def best_bundle(cart: List[Line], bs: List[Bundle]) -> Option[Bundle] =
+  best_bundle_of(filter(applicable_bundles(cart, bs), (b: Bundle) => bundle_worth_offering(b)))
+
+# A one-line bundle offer, e.g. "Tea Duo: $24.00 (save $2.00)";
+# a bundle that is not worth offering is marked " (thin offer)".
+def bundle_label(b: Bundle) -> Text =
+  b.name ++ ": " ++ format_cents(b.bundle_cents)
+    ++ " (save " ++ format_cents(savings_or_zero(b)) ++ ")"
+    ++ (if bundle_worth_offering(b) then "" else " (thin offer)")
+
+test "a bundle at or above the savings bar is worth offering" = {
+  let at_bar = {name: "Tea Duo", skus: ["TEA-001", "TEA-002"], bundle_cents: 2400};
+  let well_above = {name: "Deep Duo", skus: ["TEA-001", "TEA-002"], bundle_cents: 2000};
+  savings_or_zero(at_bar) == 200
+    and savings_or_zero(well_above) == 600
+    and bundle_worth_offering(at_bar)
+    and bundle_worth_offering(well_above)
+}
+
+test "a bundle below the savings bar is not worth offering" = {
+  let thin = {name: "Thin Duo", skus: ["TEA-001", "TEA-002"], bundle_cents: 2450};
+  let ghost = {name: "Ghost", skus: ["NOPE"], bundle_cents: 100};
+  savings_or_zero(thin) == 150
+    and not bundle_worth_offering(thin)
+    and not bundle_worth_offering(ghost)
+}
+
+test "best bundle skips bundles below the savings bar" = {
+  let cart = add_to_cart(add_to_cart([], "TEA-001", 1), "TEA-002", 1);
+  let thin = {name: "Thin Duo", skus: ["TEA-001", "TEA-002"], bundle_cents: 2450};
+  let fat = {name: "Fat Duo", skus: ["TEA-001", "TEA-002"], bundle_cents: 2000};
+  let all_thin_is_none = best_bundle(cart, [thin]) == None;
+  let picks_the_fat_one = match best_bundle(cart, [thin, fat]) {
+    Some(b) => b.name == "Fat Duo" and bundle_worth_offering(b),
+    None => false,
+  };
+  all_thin_is_none and picks_the_fat_one
+}
+
+test "thin bundle label is marked as a thin offer" = {
+  let thin = {name: "Thin Duo", skus: ["TEA-001", "TEA-002"], bundle_cents: 2450};
+  let fat = {name: "Tea Duo", skus: ["TEA-001", "TEA-002"], bundle_cents: 2400};
+  bundle_label(thin) == "Thin Duo: $24.50 (save $1.50) (thin offer)"
+    and bundle_label(fat) == "Tea Duo: $24.00 (save $2.00)"
+}

@@ -810,13 +810,14 @@ def issue_gift_card(code: Text, balance_cents: Int where balance_cents >= 0) -> 
 def top_up(card: GiftCard, amount_cents: Int where amount_cents > 0) -> GiftCard =
   GiftCard{..card, balance_cents: card.balance_cents + amount_cents}
 
-# The amount a card can pay toward a total: the smaller of balance and total.
+# The amount a card can pay toward a total: nothing under the 500c minimum,
+# otherwise the smaller of balance and total.
 def card_spend(card: GiftCard, total_cents: Int where total_cents >= 0) -> Int =
-  min(card.balance_cents, total_cents)
+  if total_cents < 500 then 0 else min(card.balance_cents, total_cents)
 
-# Whether a card fully covers a total on its own.
+# Whether a card fully covers a total on its own; totals under 500c are never covered.
 def card_covers(card: GiftCard, total_cents: Int where total_cents >= 0) -> Bool =
-  card.balance_cents >= total_cents
+  total_cents >= 500 and card.balance_cents >= total_cents
 
 # The remaining total after a card pays, paired with the drained card.
 type Redemption = {remaining_total: Int, card: GiftCard}
@@ -2002,8 +2003,12 @@ def low_stock_skus(inv: List[Stock], points: List[ReorderPoint]) -> List[Text] =
     (p: ReorderPoint) => p.sku)
 
 # Units to reorder for a sku: refill to double the threshold, at least one unit.
-def reorder_qty(inv: List[Stock], points: List[ReorderPoint], sku: Text) -> Int =
-  max(1, 2 * reorder_threshold(points, sku) - stock_qty(inv, sku))
+# Out-of-stock skus are urgent: at zero on hand, reorder double the normal quantity.
+def reorder_qty(inv: List[Stock], points: List[ReorderPoint], sku: Text) -> Int = {
+  let on_hand = stock_qty(inv, sku);
+  let base = max(1, 2 * reorder_threshold(points, sku) - on_hand);
+  if on_hand == 0 then 2 * base else base
+}
 
 # Build a purchase order for a sku, routed to its preferred supplier.
 def make_purchase_order(id: Int, sku: Text, qty: Int where qty > 0) -> PurchaseOrder =
@@ -2094,14 +2099,17 @@ def best_bundle_of(bs: List[Bundle]) -> Option[Bundle] =
     },
   }
 
-# The best applicable bundle for a cart: max savings, ties to the first listed.
+# The best applicable bundle for a cart, ignoring any bundle that does not
+# clear the 200c savings bar: max savings, ties to the first listed.
 def best_bundle(cart: List[Line], bs: List[Bundle]) -> Option[Bundle] =
-  best_bundle_of(applicable_bundles(cart, bs))
+  best_bundle_of(filter(applicable_bundles(cart, bs), (b: Bundle) => bundle_worth_offering(b)))
 
-# A one-line bundle offer, e.g. "Tea Duo: $24.00 (save $2.00)".
+# A one-line bundle offer, e.g. "Tea Duo: $24.00 (save $2.00)";
+# a bundle that is not worth offering is marked " (thin offer)".
 def bundle_label(b: Bundle) -> Text =
   b.name ++ ": " ++ format_cents(b.bundle_cents)
     ++ " (save " ++ format_cents(savings_or_zero(b)) ++ ")"
+    ++ (if bundle_worth_offering(b) then "" else " (thin offer)")
 
 # ------------------------------------------------------------
 # 16. Analytics
@@ -2125,8 +2133,9 @@ def revenue_series(ms: List[MonthOrders]) -> List[Int] =
   map(monthly_revenue(ms), (r: MonthRevenue) => r.revenue)
 
 # Percent growth from prev to cur in integer math; growth from zero counts as zero.
+# Explosive growth is capped: any percent above 999 is reported as exactly 999.
 def growth_percent(prev: Int where prev >= 0, cur: Int where cur >= 0) -> Int =
-  if prev == 0 then 0 else (cur - prev) * 100 / prev
+  if prev == 0 then 0 else min((cur - prev) * 100 / prev, 999)
 
 # Pairwise month-over-month growth percents for a revenue series.
 def growth_series(revenues: List[Int]) -> List[Int] =
@@ -2556,3 +2565,156 @@ test "gold return processing waives the fee end to end" =
     },
     Err(_) => false,
   }
+
+# ------------------------------------------------------------
+# Spliced in by `weftc splice`
+# ------------------------------------------------------------
+
+# Every sku currently at zero stock, in policy order (the order low_stock_skus uses).
+def urgent_skus(inv: List[Stock], points: List[ReorderPoint]) -> List[Text] =
+  map(filter(points, (p: ReorderPoint) => stock_qty(inv, p.sku) == 0),
+      (p: ReorderPoint) => p.sku)
+
+test "zero stock doubles the reorder qty" = {
+  let pts = [{sku: "Z", threshold: 5}, {sku: "W", threshold: 0}];
+  reorder_qty([Stock{sku: "Z", qty: 0}], pts, "Z") == 20
+    and reorder_qty([Stock{sku: "W", qty: 0}], pts, "W") == 2
+    and reorder_qty([], pts, "Z") == 20
+}
+
+test "non-zero low stock keeps its reorder qty" = {
+  let pts = [{sku: "Z", threshold: 5}];
+  reorder_qty([Stock{sku: "Z", qty: 2}], pts, "Z") == 8
+    and reorder_qty([Stock{sku: "Z", qty: 1}], pts, "Z") == 9
+    and reorder_qty([Stock{sku: "Z", qty: 12}], pts, "Z") == 1
+}
+
+test "urgent skus lists zero stock in policy order" = {
+  let pts = [{sku: "A", threshold: 2}, {sku: "B", threshold: 1}, {sku: "C", threshold: 5}];
+  let inv = [Stock{sku: "B", qty: 0}, Stock{sku: "A", qty: 0}, Stock{sku: "C", qty: 3}];
+  urgent_skus(inv, pts) == ["A", "B"]
+    and urgent_skus([Stock{sku: "A", qty: 1}, Stock{sku: "B", qty: 1}, Stock{sku: "C", qty: 9}], pts) == []
+    and urgent_skus([], pts) == ["A", "B", "C"]
+}
+
+# Whether a bundle clears the offer bar: it must save at least 200 cents.
+def bundle_worth_offering(b: Bundle) -> Bool =
+  savings_or_zero(b) >= 200
+
+test "a bundle at or above the savings bar is worth offering" = {
+  let at_bar = {name: "Tea Duo", skus: ["TEA-001", "TEA-002"], bundle_cents: 2400};
+  let well_above = {name: "Deep Duo", skus: ["TEA-001", "TEA-002"], bundle_cents: 2000};
+  savings_or_zero(at_bar) == 200
+    and savings_or_zero(well_above) == 600
+    and bundle_worth_offering(at_bar)
+    and bundle_worth_offering(well_above)
+}
+
+test "a bundle below the savings bar is not worth offering" = {
+  let thin = {name: "Thin Duo", skus: ["TEA-001", "TEA-002"], bundle_cents: 2450};
+  let ghost = {name: "Ghost", skus: ["NOPE"], bundle_cents: 100};
+  savings_or_zero(thin) == 150
+    and not bundle_worth_offering(thin)
+    and not bundle_worth_offering(ghost)
+}
+
+test "best bundle skips bundles below the savings bar" = {
+  let cart = add_to_cart(add_to_cart([], "TEA-001", 1), "TEA-002", 1);
+  let thin = {name: "Thin Duo", skus: ["TEA-001", "TEA-002"], bundle_cents: 2450};
+  let fat = {name: "Fat Duo", skus: ["TEA-001", "TEA-002"], bundle_cents: 2000};
+  let all_thin_is_none = best_bundle(cart, [thin]) == None;
+  let picks_the_fat_one = match best_bundle(cart, [thin, fat]) {
+    Some(b) => b.name == "Fat Duo" and bundle_worth_offering(b),
+    None => false,
+  };
+  all_thin_is_none and picks_the_fat_one
+}
+
+test "thin bundle label is marked as a thin offer" = {
+  let thin = {name: "Thin Duo", skus: ["TEA-001", "TEA-002"], bundle_cents: 2450};
+  let fat = {name: "Tea Duo", skus: ["TEA-001", "TEA-002"], bundle_cents: 2400};
+  bundle_label(thin) == "Thin Duo: $24.50 (save $1.50) (thin offer)"
+    and bundle_label(fat) == "Tea Duo: $24.00 (save $2.00)"
+}
+
+test "explosive growth is capped at 999" =
+  growth_percent(1, 1000) == 999
+    and growth_percent(1, 1000000) == 999
+    and growth_percent(100, 1200) == 999
+
+test "growth below the cap is unchanged" =
+  growth_percent(100, 1000) == 900
+    and growth_percent(100, 1099) == 999
+    and growth_percent(300, 400) == 33
+    and growth_percent(400, 300) == -25
+
+test "growth percent never reports above the cap" (p: Int where p >= 0 and p < 1000000, c: Int where c >= 0 and c < 1000000) =
+  growth_percent(p, c) <= 999
+
+test "growth series caps explosive months" =
+  growth_series([1, 1000, 500]) == [999, -50]
+
+# The highest-revenue month of a trading history; ties keep the earlier month.
+# (Named best_month_revenue because the program already has a best_month
+# returning Option[Int]; see bench/PARALLEL-TEST.md for the finding.)
+def best_month_revenue(ms: List[MonthOrders]) -> Option[MonthRevenue] =
+  top_month_rev(monthly_revenue(ms))
+
+test "best month revenue picks the highest earning month" =
+  best_month_revenue([
+    {month: 1, orders: [{id: 1, lines: [], state: Placed, total_cents: 10000}]},
+    {month: 2, orders: [{id: 2, lines: [], state: Shipped, total_cents: 25000}]},
+    {month: 3, orders: [{id: 3, lines: [], state: Draft, total_cents: 90000}]}
+  ]) == Some({month: 2, revenue: 25000})
+
+test "best month revenue ties keep the earlier month" =
+  best_month_revenue([
+    {month: 4, orders: [{id: 1, lines: [], state: Placed, total_cents: 12000}]},
+    {month: 5, orders: [{id: 2, lines: [], state: Placed, total_cents: 12000}]},
+    {month: 6, orders: [{id: 3, lines: [], state: Shipped, total_cents: 12000}]}
+  ]) == Some({month: 4, revenue: 12000})
+
+test "best month revenue of an empty history is none" =
+  best_month_revenue([]) == None
+
+# Whether the card can pay anything at all toward this total.
+def card_usable(card: GiftCard, total_cents: Int where total_cents >= 0) -> Bool =
+  card_spend(card, total_cents) > 0
+
+test "small totals block the gift card" = {
+  let card = issue_gift_card("GC-S", 10000);
+  card_spend(card, 499) == 0
+    and card_spend(card, 0) == 0
+    and not card_covers(card, 499)
+    and not card_covers(card, 0)
+}
+
+test "the gift card minimum starts at exactly 500 cents" = {
+  let card = issue_gift_card("GC-B", 10000);
+  card_spend(card, 499) == 0
+    and card_spend(card, 500) == 500
+    and not card_covers(card, 499)
+    and card_covers(card, 500)
+}
+
+test "large totals are unaffected by the card minimum" = {
+  let card = issue_gift_card("GC-L", 2000);
+  card_spend(card, 5000) == 2000
+    and card_spend(card, 1500) == 1500
+    and card_covers(card, 1500)
+    and not card_covers(card, 5000)
+}
+
+test "card_usable says whether the card can pay anything" = {
+  let funded = issue_gift_card("GC-U", 2000);
+  let empty = issue_gift_card("GC-0", 0);
+  card_usable(funded, 500)
+    and card_usable(funded, 100000)
+    and not card_usable(funded, 499)
+    and not card_usable(empty, 5000)
+}
+
+test "covering a total implies the card is usable" (t: Int where t >= 0 and t < 10000000, b: Int where b >= 0 and b < 10000000) = {
+  let card = issue_gift_card("P", b);
+  not card_covers(card, t) or card_usable(card, t)
+}

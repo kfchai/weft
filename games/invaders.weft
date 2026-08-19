@@ -1,0 +1,448 @@
+﻿# ============================================================
+# invaders.weft â€” Space Invaders, played in the terminal.
+#
+# Everything about the game is a pure function: `step` maps
+# (state, command) to the next state, so the whole game is
+# deterministic [W1] and unit-testable. The only effectful part
+# is `game_loop`, which takes Io, prints a frame, and reads a
+# command. Randomness is a seeded PRNG carried in the state, so
+# a replay of the same keys is always the same game.
+#
+# Controls (one command per line):
+#   a / d   move left / right      f  fire
+#   (enter) hold position          q  quit
+# ============================================================
+
+# ------------------------------------------------------------
+# Board
+# ------------------------------------------------------------
+
+# Playfield width in cells.
+def board_w: Int = 11
+
+# Playfield height in cells; the last row is the player's.
+def board_h: Int = 12
+
+# The row the player's cannon occupies.
+def player_row: Int = 11
+
+# The row an invader must reach to overrun the player.
+def invasion_row: Int = 10
+
+# ------------------------------------------------------------
+# State
+# ------------------------------------------------------------
+
+# One invader: a grid position and whether it is still flying.
+type Inv = {x: Int, y: Int, alive: Bool}
+
+# A grid position used for shots and bombs.
+type Cell = {x: Int, y: Int}
+
+# The whole game state; every field is rebuilt each tick.
+type Game = {
+  invaders: List[Inv],
+  shots: List[Cell],
+  bombs: List[Cell],
+  px: Int,
+  dir: Int,
+  tick: Int,
+  seed: Int,
+  score: Int,
+  lives: Int,
+  over: Bool,
+  msg: Text
+}
+
+# One rank of invaders at the given row.
+def rank(row: Int) -> List[Inv] =
+  map(range(0, 5), (c: Int) => {x: c * 2 + 1, y: row, alive: true})
+
+# The opening formation: three ranks of five.
+def initial_invaders: List[Inv] =
+  rank(1) ++ rank(2) ++ rank(3)
+
+# A fresh game, seeded so replays are reproducible.
+def new_game(seed: Int) -> Game = {
+  invaders: initial_invaders,
+  shots: [],
+  bombs: [],
+  px: 5,
+  dir: 1,
+  tick: 0,
+  seed: seed,
+  score: 0,
+  lives: 3,
+  over: false,
+  msg: "shoot them all"
+}
+
+# ------------------------------------------------------------
+# Small helpers
+# ------------------------------------------------------------
+
+# The next value of the linear-congruential sequence.
+def next_seed(s: Int) -> Int =
+  (s * 1103515 + 12345) % 2147483
+
+# Whether any cell in a list sits at this position.
+def occupied(cs: List[Cell], x: Int, y: Int) -> Bool =
+  match find(cs, (c: Cell) => c.x == x and c.y == y) {
+    Some(_) => true,
+    None => false,
+  }
+
+# The invaders still flying.
+def alive_invaders(g: Game) -> List[Inv] =
+  filter(g.invaders, (i: Inv) => i.alive)
+
+# How many invaders are still flying.
+def alive_count(g: Game) -> Int =
+  len(alive_invaders(g))
+
+# Whether an invader is still flying at this position.
+def invader_at(invs: List[Inv], x: Int, y: Int) -> Bool =
+  match find(invs, (i: Inv) => i.alive and i.x == x and i.y == y) {
+    Some(_) => true,
+    None => false,
+  }
+
+# Keep a coordinate inside the playfield.
+def clamp_x(x: Int) -> Int =
+  max(0, min(board_w - 1, x))
+
+# ------------------------------------------------------------
+# Rendering
+# ------------------------------------------------------------
+
+# The character shown at one grid cell.
+def cell_char(g: Game, x: Int, y: Int) -> Text =
+  if y == player_row and x == g.px then "A"
+  else if occupied(g.shots, x, y) then "|"
+  else if occupied(g.bombs, x, y) then "*"
+  else if invader_at(g.invaders, x, y) then "W"
+  else "."
+
+# One rendered row of the playfield.
+def row_text(g: Game, y: Int) -> Text =
+  fold(range(0, board_w), "", (acc: Text, x: Int) => acc ++ cell_char(g, x, y))
+
+# The playfield, framed by a border.
+def field_text(g: Game) -> Text = {
+  let edge = fold(range(0, board_w), "", (acc: Text, x: Int) => acc ++ "-");
+  let rows = map(range(0, board_h), (y: Int) => "|" ++ row_text(g, y) ++ "|");
+  "+" ++ edge ++ "+\n" ++ join(rows, "\n") ++ "\n+" ++ edge ++ "+"
+}
+
+# One heart per remaining life.
+def lives_text(n: Int) -> Text =
+  fold(range(0, max(0, n)), "", (acc: Text, i: Int) => acc ++ "<3 ")
+
+# The status line under the board.
+def hud_text(g: Game) -> Text =
+  "score " ++ text_of_int(g.score)
+    ++ "   lives " ++ trim(lives_text(g.lives))
+    ++ "   left " ++ text_of_int(alive_count(g))
+    ++ "   " ++ g.msg
+
+# A full frame: board, status, and the prompt.
+def frame_text(g: Game) -> Text =
+  field_text(g) ++ "\n" ++ hud_text(g)
+
+# ------------------------------------------------------------
+# Tick: shots
+# ------------------------------------------------------------
+
+# Move every player shot one row up, dropping those off the board.
+def advance_shots(cs: List[Cell]) -> List[Cell] =
+  filter(map(cs, (c: Cell) => {x: c.x, y: c.y - 1}), (c: Cell) => c.y >= 0)
+
+# Move every bomb one row down, dropping those past the player.
+def advance_bombs(cs: List[Cell]) -> List[Cell] =
+  filter(map(cs, (c: Cell) => {x: c.x, y: c.y + 1}), (c: Cell) => c.y <= player_row)
+
+# Whether a shot is about to hit a flying invader.
+def shot_connects(invs: List[Inv], c: Cell) -> Bool =
+  invader_at(invs, c.x, c.y)
+
+# Whether a flying invader is being hit by any shot.
+def invader_struck(shots: List[Cell], i: Inv) -> Bool =
+  i.alive and occupied(shots, i.x, i.y)
+
+# Resolve shot-versus-invader collisions for one tick.
+def resolve_hits(g: Game) -> Game = {
+  let killed = len(filter(g.invaders, (i: Inv) => invader_struck(g.shots, i)));
+  let survivors = map(g.invaders, (i: Inv) =>
+    if invader_struck(g.shots, i) then {..i, alive: false} else i);
+  let spent = filter(g.shots, (c: Cell) => not shot_connects(g.invaders, c));
+  {..g, invaders: survivors, shots: spent, score: g.score + killed * 10}
+}
+
+# ------------------------------------------------------------
+# Tick: invaders
+# ------------------------------------------------------------
+
+# Whether the formation would leave the board on this step.
+def hits_edge(g: Game) -> Bool =
+  fold(alive_invaders(g), false, (acc: Bool, i: Inv) =>
+    acc or i.x + g.dir < 0 or i.x + g.dir > board_w - 1)
+
+# Advance the formation: sidestep, or drop a row and reverse.
+def move_invaders(g: Game) -> Game =
+  if hits_edge(g)
+  then {..g,
+        dir: -g.dir,
+        invaders: map(g.invaders, (i: Inv) => {..i, y: i.y + 1, x: i.x, alive: i.alive})}
+  else {..g,
+        invaders: map(g.invaders, (i: Inv) => {..i, x: i.x + g.dir, y: i.y, alive: i.alive})}
+
+# The formation steps every other tick, so the player can react.
+def invaders_due(g: Game) -> Bool =
+  g.tick % 2 == 0
+
+# ------------------------------------------------------------
+# Tick: bombs
+# ------------------------------------------------------------
+
+# The invader chosen to drop the next bomb, if any are flying.
+def bomber(g: Game) -> Option[Inv] = {
+  let alive = alive_invaders(g);
+  if len(alive) == 0 then None
+  else list_get(alive, g.seed % len(alive))
+}
+
+# Invaders drop a bomb every third tick.
+def bombs_due(g: Game) -> Bool =
+  g.tick % 3 == 0
+
+# Add a bomb under the chosen invader when one is due.
+def drop_bomb(g: Game) -> Game =
+  if not bombs_due(g) then g
+  else match bomber(g) {
+    None => g,
+    Some(i) => {..g, bombs: append(g.bombs, {x: i.x, y: i.y + 1})},
+  }
+
+# Whether a bomb has reached the player's cell.
+def bomb_strikes(g: Game, c: Cell) -> Bool =
+  c.y == player_row and c.x == g.px
+
+# Resolve bomb-versus-player collisions for one tick.
+def resolve_bombs(g: Game) -> Game = {
+  let hits = len(filter(g.bombs, (c: Cell) => bomb_strikes(g, c)));
+  let rest = filter(g.bombs, (c: Cell) => not bomb_strikes(g, c));
+  if hits == 0
+  then {..g, bombs: rest}
+  else {..g, bombs: rest, lives: max(0, g.lives - hits), msg: "hit!"}
+}
+
+# ------------------------------------------------------------
+# Tick: endings
+# ------------------------------------------------------------
+
+# Whether any invader has reached the player's line.
+def overrun(g: Game) -> Bool =
+  fold(alive_invaders(g), false, (acc: Bool, i: Inv) => acc or i.y >= invasion_row)
+
+# Settle the game's outcome once a tick has been resolved.
+def check_end(g: Game) -> Game =
+  if alive_count(g) == 0 then {..g, over: true, msg: "you win"}
+  else if g.lives <= 0 then {..g, over: true, msg: "game over"}
+  else if overrun(g) then {..g, over: true, lives: 0, msg: "overrun"}
+  else g
+
+# ------------------------------------------------------------
+# Commands and the tick
+# ------------------------------------------------------------
+
+# The player's cannon after a movement command.
+def moved_px(g: Game, cmd: Text) -> Int =
+  if cmd == "a" then clamp_x(g.px - 1)
+  else if cmd == "d" then clamp_x(g.px + 1)
+  else g.px
+
+# Firing adds a shot above the cannon; only two may be in flight.
+def fired_shots(g: Game, cmd: Text) -> List[Cell] =
+  if cmd == "f" and len(g.shots) < 2
+  then append(g.shots, {x: g.px, y: player_row - 1})
+  else g.shots
+
+# Apply the player's command before the world moves.
+def apply_command(g: Game, cmd: Text) -> Game =
+  {..g, px: moved_px(g, cmd), shots: fired_shots(g, cmd)}
+
+# Advance the world one tick: shots, hits, formation, bombs, endings.
+def advance(g: Game) -> Game = {
+  let moved = {..g, shots: advance_shots(g.shots), bombs: advance_bombs(g.bombs)};
+  let shot = resolve_hits(moved);
+  let marched = if invaders_due(shot) then move_invaders(shot) else shot;
+  let bombed = resolve_bombs(drop_bomb(marched));
+  check_end({..bombed, tick: g.tick + 1, seed: next_seed(g.seed), msg: bombed.msg})
+}
+
+# One full turn: read a command, then let the world move.
+def step(g: Game, cmd: Text) -> Game =
+  if g.over then g
+  else if cmd == "q" then {..g, over: true, msg: "you fled"}
+  else advance(apply_command(g, trim(to_lower(cmd))))
+
+# ------------------------------------------------------------
+# The loop (the only effectful part)
+# ------------------------------------------------------------
+
+# Print a frame, read a command, recurse; bounded so EOF cannot hang.
+def game_loop(io: Io, g: Game, turns_left: Int) -> Int = {
+  let _ = print(io, frame_text(g));
+  if g.over then {
+    let _ = print(io, "final score " ++ text_of_int(g.score));
+    0
+  }
+  else if turns_left <= 0 then {
+    let _ = print(io, "out of turns - final score " ++ text_of_int(g.score));
+    0
+  }
+  else {
+    let _ = print(io, "> ");
+    let cmd = read_line(io);
+    game_loop(io, step(g, cmd), turns_left - 1)
+  }
+}
+
+def main(io: Io) -> Int = {
+  let _ = print(io, "SPACE INVADERS - a/d move, f fire, enter wait, q quit");
+  game_loop(io, new_game(7), 400)
+}
+
+# ------------------------------------------------------------
+# Tests â€” the whole game is pure, so all of it is testable
+# ------------------------------------------------------------
+
+test "a new game has fifteen invaders in three ranks" =
+  alive_count(new_game(1)) == 15
+
+test "ranks are spaced across the board" =
+  map(rank(2), (i: Inv) => i.x) == [1, 3, 5, 7, 9]
+
+test "moving left and right shifts the cannon" = {
+  let g = new_game(1);
+  moved_px(g, "a") == 4 and moved_px(g, "d") == 6 and moved_px(g, "") == 5
+}
+
+test "the cannon cannot leave the board" = {
+  let g = {..new_game(1), px: 0};
+  moved_px(g, "a") == 0
+}
+
+test "firing puts a shot above the cannon" =
+  fired_shots(new_game(1), "f") == [{x: 5, y: 10}]
+
+test "no more than two shots fly at once" = {
+  let g = {..new_game(1), shots: [{x: 1, y: 4}, {x: 2, y: 5}]};
+  len(fired_shots(g, "f")) == 2
+}
+
+test "shots climb and leave the board" =
+  advance_shots([{x: 3, y: 1}, {x: 4, y: 0}]) == [{x: 3, y: 0}]
+
+test "bombs fall and stop past the player" =
+  advance_bombs([{x: 3, y: 10}, {x: 4, y: 11}]) == [{x: 3, y: 11}]
+
+test "a shot kills the invader it reaches" = {
+  let g = {..new_game(1), shots: [{x: 1, y: 1}]};
+  let after = resolve_hits(g);
+  alive_count(after) == 14 and after.score == 10 and after.shots == []
+}
+
+test "a shot that hits nothing survives the tick" = {
+  let g = {..new_game(1), shots: [{x: 0, y: 6}]};
+  resolve_hits(g).shots == [{x: 0, y: 6}]
+}
+
+test "one shot cannot kill two invaders" = {
+  let g = {..new_game(1), shots: [{x: 1, y: 1}, {x: 3, y: 1}]};
+  resolve_hits(g).score == 20
+}
+
+test "the formation sidesteps when there is room" =
+  map(alive_invaders(move_invaders(new_game(1))), (i: Inv) => i.x)
+    == [2, 4, 6, 8, 10, 2, 4, 6, 8, 10, 2, 4, 6, 8, 10]
+
+test "the formation drops and reverses at the edge" = {
+  let g = {..new_game(1), invaders: [{x: 10, y: 1, alive: true}], dir: 1};
+  let after = move_invaders(g);
+  after.dir == -1 and map(after.invaders, (i: Inv) => i.y) == [2]
+}
+
+test "a bomb on the cannon costs a life" = {
+  let g = {..new_game(1), bombs: [{x: 5, y: 11}], px: 5};
+  let after = resolve_bombs(g);
+  after.lives == 2 and after.bombs == []
+}
+
+test "a bomb beside the cannon is harmless" = {
+  let g = {..new_game(1), bombs: [{x: 4, y: 11}], px: 5};
+  resolve_bombs(g).lives == 3
+}
+
+test "clearing the board wins the game" = {
+  let g = {..new_game(1), invaders: []};
+  check_end(g).over and check_end(g).msg == "you win"
+}
+
+test "losing every life ends the game" = {
+  let g = {..new_game(1), lives: 0};
+  check_end(g).over and check_end(g).msg == "game over"
+}
+
+test "invaders reaching the line end the game" = {
+  let g = {..new_game(1), invaders: [{x: 3, y: 10, alive: true}]};
+  check_end(g).over and check_end(g).msg == "overrun"
+}
+
+test "quitting ends the game" =
+  step(new_game(1), "q").over
+
+test "a finished game ignores further commands" = {
+  let g = {..new_game(1), over: true, score: 40};
+  step(g, "f").score == 40
+}
+
+test "a rendered frame is a bordered board plus a status line" = {
+  let lines = split(frame_text(new_game(1)), "\n");
+  len(lines) == board_h + 3 and text_len(unwrap_or(list_get(lines, 1), "")) == board_w + 2
+}
+
+test "the cannon is drawn on the player row" =
+  cell_char(new_game(1), 5, player_row) == "A"
+
+test "empty space is drawn as a dot" =
+  cell_char(new_game(1), 0, 6) == "."
+
+test "invaders are drawn where they fly" =
+  cell_char(new_game(1), 1, 1) == "W"
+
+test "the seed advances every tick" =
+  advance(new_game(7)).seed == next_seed(7)
+
+test "the tick counter advances" =
+  advance(new_game(7)).tick == 1
+
+test "the cannon always stays on the board" (n: Int) = {
+  let g = {..new_game(1), px: clamp_x(n)};
+  moved_px(g, "a") >= 0 and moved_px(g, "d") <= board_w - 1
+}
+
+test "the seed never leaves the positive range" (s: Int where s >= 0 and s < 2147483) =
+  next_seed(s) >= 0 and next_seed(s) < 2147483
+
+test "no command ever revives an invader" (n: Int where n >= 0 and n <= 3) = {
+  let cmds = ["a", "d", "f", ""];
+  let cmd = unwrap_or(list_get(cmds, n), "");
+  alive_count(step(new_game(1), cmd)) <= 15
+}
+
+test "score only ever climbs" (n: Int where n >= 0 and n <= 3) = {
+  let cmds = ["a", "d", "f", ""];
+  let cmd = unwrap_or(list_get(cmds, n), "");
+  step(new_game(1), cmd).score >= 0
+}

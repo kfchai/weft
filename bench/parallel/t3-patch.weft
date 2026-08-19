@@ -1,0 +1,44 @@
+# Percent growth from prev to cur in integer math; growth from zero counts as zero.
+# Explosive growth is capped: any percent above 999 is reported as exactly 999.
+def growth_percent(prev: Int where prev >= 0, cur: Int where cur >= 0) -> Int =
+  if prev == 0 then 0 else min((cur - prev) * 100 / prev, 999)
+
+test "explosive growth is capped at 999" =
+  growth_percent(1, 1000) == 999
+    and growth_percent(1, 1000000) == 999
+    and growth_percent(100, 1200) == 999
+
+test "growth below the cap is unchanged" =
+  growth_percent(100, 1000) == 900
+    and growth_percent(100, 1099) == 999
+    and growth_percent(300, 400) == 33
+    and growth_percent(400, 300) == -25
+
+test "growth percent never reports above the cap" (p: Int where p >= 0 and p < 1000000, c: Int where c >= 0 and c < 1000000) =
+  growth_percent(p, c) <= 999
+
+test "growth series caps explosive months" =
+  growth_series([1, 1000, 500]) == [999, -50]
+
+# The highest-revenue month of a trading history; ties keep the earlier month.
+# (Named best_month_revenue because the program already has a best_month
+# returning Option[Int]; see bench/PARALLEL-TEST.md for the finding.)
+def best_month_revenue(ms: List[MonthOrders]) -> Option[MonthRevenue] =
+  top_month_rev(monthly_revenue(ms))
+
+test "best month revenue picks the highest earning month" =
+  best_month_revenue([
+    {month: 1, orders: [{id: 1, lines: [], state: Placed, total_cents: 10000}]},
+    {month: 2, orders: [{id: 2, lines: [], state: Shipped, total_cents: 25000}]},
+    {month: 3, orders: [{id: 3, lines: [], state: Draft, total_cents: 90000}]}
+  ]) == Some({month: 2, revenue: 25000})
+
+test "best month revenue ties keep the earlier month" =
+  best_month_revenue([
+    {month: 4, orders: [{id: 1, lines: [], state: Placed, total_cents: 12000}]},
+    {month: 5, orders: [{id: 2, lines: [], state: Placed, total_cents: 12000}]},
+    {month: 6, orders: [{id: 3, lines: [], state: Shipped, total_cents: 12000}]}
+  ]) == Some({month: 4, revenue: 12000})
+
+test "best month revenue of an empty history is none" =
+  best_month_revenue([]) == None

@@ -1,0 +1,34 @@
+# Units to reorder for a sku: refill to double the threshold, at least one unit.
+# Out-of-stock skus are urgent: at zero on hand, reorder double the normal quantity.
+def reorder_qty(inv: List[Stock], points: List[ReorderPoint], sku: Text) -> Int = {
+  let on_hand = stock_qty(inv, sku);
+  let base = max(1, 2 * reorder_threshold(points, sku) - on_hand);
+  if on_hand == 0 then 2 * base else base
+}
+
+# Every sku currently at zero stock, in policy order (the order low_stock_skus uses).
+def urgent_skus(inv: List[Stock], points: List[ReorderPoint]) -> List[Text] =
+  map(filter(points, (p: ReorderPoint) => stock_qty(inv, p.sku) == 0),
+      (p: ReorderPoint) => p.sku)
+
+test "zero stock doubles the reorder qty" = {
+  let pts = [{sku: "Z", threshold: 5}, {sku: "W", threshold: 0}];
+  reorder_qty([Stock{sku: "Z", qty: 0}], pts, "Z") == 20
+    and reorder_qty([Stock{sku: "W", qty: 0}], pts, "W") == 2
+    and reorder_qty([], pts, "Z") == 20
+}
+
+test "non-zero low stock keeps its reorder qty" = {
+  let pts = [{sku: "Z", threshold: 5}];
+  reorder_qty([Stock{sku: "Z", qty: 2}], pts, "Z") == 8
+    and reorder_qty([Stock{sku: "Z", qty: 1}], pts, "Z") == 9
+    and reorder_qty([Stock{sku: "Z", qty: 12}], pts, "Z") == 1
+}
+
+test "urgent skus lists zero stock in policy order" = {
+  let pts = [{sku: "A", threshold: 2}, {sku: "B", threshold: 1}, {sku: "C", threshold: 5}];
+  let inv = [Stock{sku: "B", qty: 0}, Stock{sku: "A", qty: 0}, Stock{sku: "C", qty: 3}];
+  urgent_skus(inv, pts) == ["A", "B"]
+    and urgent_skus([Stock{sku: "A", qty: 1}, Stock{sku: "B", qty: 1}, Stock{sku: "C", qty: 9}], pts) == []
+    and urgent_skus([], pts) == ["A", "B", "C"]
+}

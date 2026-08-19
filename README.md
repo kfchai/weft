@@ -71,12 +71,37 @@ weftc repair-context <file.weft>      # first failure -> paste-ready repair payl
 weftc skeleton <file.weft>            # the map: signatures + docs, ~10x compressed
 weftc graph <file.weft>               # dependency edges (name -> references)
 weftc ctx <file.weft> <def>...        # context slice for modifying those defs
+weftc splice <base> <patch>... [--write]   # merge patches by definition name
 ```
 
 The design's first principle is spec rule **[W41]: every failure is
 machine-actionable** — any failure carries a rule id, span, and
 expected/actual/hint; `repair-context` assembles failure + cited rule text +
 source excerpt into one payload for the generate→check→repair loop.
+
+## Play something written in it
+
+```
+weftc/target/release/weftc run games/invaders.weft
+```
+
+Space Invaders in a pure functional language: `step(state, command)` is one
+total function, so the entire game — collisions, formation marching, bomb
+drops, win/lose endings — is deterministic and unit-tested (30 tests, no
+mocks). The only effectful code is the loop that prints a frame and reads a
+key. Controls: `a`/`d` move, `f` fire, enter waits, `q` quits.
+
+```
++-----------+
+|...........|
+|..W.W.W.W.W|
+|..W.W.*.W.W|
+|...........|
+|.....|.....|
+|.....A.....|
++-----------+
+score 10   lives <3 <3 <3   left 14
+```
 
 | file | what |
 |------|------|
