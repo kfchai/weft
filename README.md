@@ -40,6 +40,17 @@ repair rounds; zero fluency penalty vs Python for frontier models up to
 recursive-descent-parser difficulty; and a 630-line codebase was correctly
 modified by an agent that saw only a 222-line `weftc ctx` slice.
 
+**Where the checker actually helps, measured** (`bench/ESCAPE-RATE.md`): 57
+realistic agent mistakes injected into the same module in both Weft and a
+`mypy --strict` Python port, classified by where each one died. For
+domain-logic bugs the two languages are *identical* — same verdict on all 33,
+0 caught by either checker, the same 10 escaping the test suite. The
+difference is confined to two categories: effects (4 compile errors in Weft,
+4 silent escapes in Python) and shared mutable state (4 mistakes that cannot
+be written in Weft at all). The honest summary is that Weft's edge is not its
+type system but its lack of ambient authority — which is precisely the failure
+mode of an agent editing code it has only partly read.
+
 ## Status: Phase 1 complete
 
 Phase 0 passed: 10/10 exit-test tasks written by spec-only models with zero
@@ -110,6 +121,7 @@ score 10   lives <3 <3 <3   left 14
 | [EXIT-TEST.md](EXIT-TEST.md) | Protocol + results: fresh models writing Weft from the spec alone |
 | [exit-test/](exit-test/) | The 10 model-written programs (double as the kernel's regression corpus) |
 | [weftc/](weftc/) | Phase 1 kernel: lexer, parser, diagnostics (typechecker next) |
+| [bench/ESCAPE-RATE.md](bench/ESCAPE-RATE.md) | Where agent mistakes die: Weft vs `mypy --strict` Python, 57 injected bugs |
 
 Examples: 01 hello · 02 fizzbuzz · 03 variants+records · 04 generics ·
 05 contracts · 06 Result/`?` · 07 property tests · 08 typed holes ·

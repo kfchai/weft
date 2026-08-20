@@ -1,0 +1,222 @@
+[
+  {
+    "id": "a01",
+    "target": "pad2",
+    "area": "catalog",
+    "description": "The two-digit zero-padding helper pads values up to and including 10, so the input 10 renders as a three-character \"010\" instead of \"10\".",
+    "why_plausible": "An agent tidying the padding helper second-guesses the boundary and 'fixes' the strict comparison to an inclusive one without checking which side of 10 needs padding.",
+    "old": "  if n < 10 then \"0\" ++ text_of_int(n) else text_of_int(n)",
+    "new": "  if n <= 10 then \"0\" ++ text_of_int(n) else text_of_int(n)",
+    "py_old": "    if n < 10:\n",
+    "py_new": "    if n <= 10:\n"
+  },
+  {
+    "id": "a02",
+    "target": "catalog",
+    "area": "catalog",
+    "description": "The stoneware mug's unit price is 1080 cents instead of 1800 cents, so every quote, order total and receipt involving that sku is cheaper.",
+    "why_plausible": "An agent updating catalog prices transposes two digits while editing one row of the price table.",
+    "old": "  {sku: \"MUG-001\", name: \"Stoneware Mug\", unit_cents: 1800},",
+    "new": "  {sku: \"MUG-001\", name: \"Stoneware Mug\", unit_cents: 1080},",
+    "py_old": "    Product(sku=\"MUG-001\", name=\"Stoneware Mug\", unit_cents=1800),\n",
+    "py_new": "    Product(sku=\"MUG-001\", name=\"Stoneware Mug\", unit_cents=1080),\n"
+  },
+  {
+    "id": "a03",
+    "target": "find_product",
+    "area": "catalog",
+    "description": "Product lookup matches any catalogue sku that merely contains the requested text rather than requiring exact equality, so a partial code such as \"TEA\" resolves to the first tea product instead of failing.",
+    "why_plausible": "An agent asked to make sku lookup more forgiving of user input reaches for a substring test without realising exact matching is what every caller relies on.",
+    "old": "  find(catalog, (p: Product) => p.sku == sku)",
+    "new": "  find(catalog, (p: Product) => contains(p.sku, sku))",
+    "py_old": "    for p in catalog:\n        if p.sku == sku:\n",
+    "py_new": "    for p in catalog:\n        if sku in p.sku:\n"
+  },
+  {
+    "id": "a04",
+    "target": "take_stock",
+    "area": "stock",
+    "description": "Taking stock reports insufficient stock when the requested quantity exactly equals the quantity on hand, so an order that would empty a sku is rejected.",
+    "why_plausible": "An agent worrying about stock reaching zero loosens the shortage comparison to include equality, mistaking 'no stock left afterwards' for 'not enough stock'.",
+    "old": "  if stock_qty(inv, sku) < qty",
+    "new": "  if stock_qty(inv, sku) <= qty",
+    "py_old": "    if stock_qty(inv, sku) < qty:\n",
+    "py_new": "    if stock_qty(inv, sku) <= qty:\n"
+  },
+  {
+    "id": "a05",
+    "target": "restock",
+    "area": "stock",
+    "description": "Restocking a sku the inventory does not track silently succeeds and returns the inventory unchanged instead of reporting an error.",
+    "why_plausible": "An agent making order cancellation robust decides an unknown sku should not be fatal and turns the error branch into a no-op success.",
+    "old": "    None => Err(\"cannot restock unknown sku: \" ++ sku),",
+    "new": "    None => Ok(inv),",
+    "py_old": "        raise StoreError(\"cannot restock unknown sku: \" + sku)\n",
+    "py_new": "        return inv\n"
+  },
+  {
+    "id": "a06",
+    "target": "initial_stock",
+    "area": "stock",
+    "description": "The opening inventory holds 6 cast iron teapots instead of 4, so availability checks and stock totals for that sku start two units too high.",
+    "why_plausible": "An agent nudges the seeded demo inventory upward to make a scenario work rather than fixing the scenario that was short on stock.",
+    "old": "  Stock{sku: \"POT-001\", qty: 4},",
+    "new": "  Stock{sku: \"POT-001\", qty: 6},",
+    "py_old": "    Stock(sku=\"POT-001\", qty=4),\n",
+    "py_new": "    Stock(sku=\"POT-001\", qty=6),\n"
+  },
+  {
+    "id": "a07",
+    "target": "add_to_cart",
+    "area": "cart",
+    "description": "Adding a sku that is already in the cart replaces the existing line quantity with the new quantity instead of adding the two together.",
+    "why_plausible": "An agent rewriting the merge branch as a record update writes the incoming quantity straight into the field and forgets to include the quantity already there.",
+    "old": "      if l.sku == sku then {..l, qty: l.qty + qty} else l),",
+    "new": "      if l.sku == sku then {..l, qty: qty} else l),",
+    "py_old": "        Line(sku=line.sku, qty=line.qty + qty) if line.sku == sku else line\n",
+    "py_new": "        Line(sku=line.sku, qty=qty) if line.sku == sku else line\n"
+  },
+  {
+    "id": "a08",
+    "target": "cart_count",
+    "area": "cart",
+    "description": "The cart count returns the number of distinct lines rather than the sum of the unit quantities across those lines.",
+    "why_plausible": "An agent reading only the function name assumes 'count' means how many items are listed and simplifies the accumulator to increment by one per line.",
+    "old": "  fold(cart, 0, (acc: Int, l: Line) => acc + l.qty)",
+    "new": "  fold(cart, 0, (acc: Int, l: Line) => acc + 1)",
+    "py_old": "    for line in cart:\n        acc = acc + line.qty\n",
+    "py_new": "    for line in cart:\n        acc = acc + 1\n"
+  },
+  {
+    "id": "a09",
+    "target": "cart_qty",
+    "area": "cart",
+    "description": "When the requested sku is present in the cart, the quantity query returns the total unit count of the entire cart instead of just that sku's quantity.",
+    "why_plausible": "An agent 'fixing' the lookup to handle a sku spread over several lines reaches for the existing cart-total helper instead of summing only the matching lines.",
+    "old": "    Some(l) => l.qty,\n    None => 0,\n  }",
+    "new": "    Some(_) => cart_count(cart),\n    None => 0,\n  }",
+    "py_old": "    for line in cart:\n        if line.sku == sku:\n            return line.qty\n    return 0\n",
+    "py_new": "    for line in cart:\n        if line.sku == sku:\n            return cart_count(cart)\n    return 0\n"
+  },
+  {
+    "id": "a10",
+    "target": "tier_percent",
+    "area": "pricing",
+    "description": "The top discount tier is awarded at a subtotal of exactly 50000 as well as above it, so a subtotal of exactly 50000 earns 10% rather than 5%.",
+    "why_plausible": "An agent aligning the tier boundaries with the 'waived at or above' wording used by the shipping rule flips one strict comparison to inclusive.",
+    "old": "  if subtotal_cents > 50000 then 10",
+    "new": "  if subtotal_cents >= 50000 then 10",
+    "py_old": "    if subtotal_cents > 50000:\n",
+    "py_new": "    if subtotal_cents >= 50000:\n"
+  },
+  {
+    "id": "a11",
+    "target": "tier_discount",
+    "area": "pricing",
+    "description": "The tier discount divides the subtotal by 100 before multiplying by the percentage, truncating to whole dollars first, so subtotals with non-zero cents yield a smaller discount than intended.",
+    "why_plausible": "An agent reordering the arithmetic to 'avoid a large intermediate product' does not notice that integer division earlier in the expression changes the rounding.",
+    "old": "  subtotal_cents * tier_percent(subtotal_cents) / 100",
+    "new": "  subtotal_cents / 100 * tier_percent(subtotal_cents)",
+    "py_old": "    return _int_div(subtotal_cents * tier_percent(subtotal_cents), 100)\n",
+    "py_new": "    return _int_div(subtotal_cents, 100) * tier_percent(subtotal_cents)\n"
+  },
+  {
+    "id": "a12",
+    "target": "line_coupon_discount",
+    "area": "pricing",
+    "description": "A per-sku coupon percentage is applied to a single unit's price rather than to the whole line's cost, so multi-unit lines receive only a fraction of the intended discount.",
+    "why_plausible": "An agent inlining the line-cost lookup grabs the unit price helper instead, since the local variable is only named 'cost'.",
+    "old": "def line_coupon_discount(coupons: List[Coupon], l: Line) -> Result[Int, Text] = {\n  let cost = line_cost(l)?;",
+    "new": "def line_coupon_discount(coupons: List[Coupon], l: Line) -> Result[Int, Text] = {\n  let cost = unit_price(l.sku)?;",
+    "py_old": "    cost = line_cost(l)\n",
+    "py_new": "    cost = unit_price(l.sku)\n"
+  },
+  {
+    "id": "a13",
+    "target": "price_cart",
+    "area": "pricing",
+    "description": "The free-shipping threshold is tested against the pre-discount subtotal instead of the discounted amount, so a cart that drops below the threshold after discounts still ships free.",
+    "why_plausible": "An agent touching the pricing pipeline picks the most obvious in-scope variable for the shipping call and does not notice that shipping is meant to key off the post-discount figure.",
+    "old": "  let ship = shipping_fee(discounted);",
+    "new": "  let ship = shipping_fee(sub);",
+    "py_old": "    ship = shipping_fee(discounted)\n",
+    "py_new": "    ship = shipping_fee(sub)\n"
+  },
+  {
+    "id": "a14",
+    "target": "can_transition",
+    "area": "orders",
+    "description": "A shipped order is allowed to move to cancelled, a transition the lifecycle is supposed to forbid because shipped is terminal.",
+    "why_plausible": "An agent asked to support returns adds cancellation out of the shipped state without realising shipped was deliberately terminal.",
+    "old": "    Shipped => false,",
+    "new": "    Shipped => match to { Cancelled => true, _ => false },",
+    "py_old": "        case OrderState.SHIPPED:\n            return False\n",
+    "py_new": "        case OrderState.SHIPPED:\n            match to:\n                case OrderState.CANCELLED:\n                    return True\n                case OrderState.DRAFT | OrderState.PLACED | OrderState.SHIPPED:\n                    return False\n                case _ as unreachable_from_shipped:\n                    assert_never(unreachable_from_shipped)\n"
+  },
+  {
+    "id": "a15",
+    "target": "place_order",
+    "area": "orders",
+    "description": "A placed order records the pre-discount subtotal as its stored total, so discounts and shipping are omitted from the order's recorded amount.",
+    "why_plausible": "An agent reading the priced record picks the subtotal field, the first and most familiar-looking money field, instead of the final total.",
+    "old": "        let placed = transition({..o, total_cents: priced.total}, Placed)?;",
+    "new": "        let placed = transition({..o, total_cents: priced.subtotal}, Placed)?;",
+    "py_old": "                    id=o.id, lines=o.lines, state=o.state, total_cents=priced.total\n",
+    "py_new": "                    id=o.id, lines=o.lines, state=o.state, total_cents=priced.subtotal\n"
+  },
+  {
+    "id": "a16",
+    "target": "take_lines",
+    "area": "orders",
+    "description": "When reserving stock line by line, each step continues from the original inventory rather than the inventory produced by the previous line, so only the last line's deduction survives on multi-line orders.",
+    "why_plausible": "An agent editing the recursive step passes the parameter name by autopilot instead of the freshly updated inventory bound just above.",
+    "old": "      let next = take_stock(inv, l.sku, l.qty)?;\n      take_lines(next, rest)",
+    "new": "      let next = take_stock(inv, l.sku, l.qty)?;\n      take_lines(inv, rest)",
+    "py_old": "    next_inv = take_stock(inv, l.sku, l.qty)\n    return take_lines(next_inv, rest)\n",
+    "py_new": "    next_inv = take_stock(inv, l.sku, l.qty)\n    return take_lines(inv, rest)\n"
+  },
+  {
+    "id": "a17",
+    "target": "order_revenue",
+    "area": "reporting",
+    "description": "Only shipped orders contribute revenue; orders that are placed but not yet shipped now count as zero.",
+    "why_plausible": "An agent tightening revenue recognition to 'only count what has actually gone out the door' drops the placed case without checking the reports that depend on it.",
+    "old": "    Placed => o.total_cents,\n    Shipped => o.total_cents,",
+    "new": "    Placed => 0,\n    Shipped => o.total_cents,",
+    "py_old": "        case OrderState.PLACED:\n            return o.total_cents\n        case OrderState.SHIPPED:\n            return o.total_cents\n",
+    "py_new": "        case OrderState.PLACED:\n            return 0\n        case OrderState.SHIPPED:\n            return o.total_cents\n"
+  },
+  {
+    "id": "a18",
+    "target": "max_line",
+    "area": "reporting",
+    "description": "When two lines tie on quantity, the later-appearing line wins instead of the earlier one, changing which sku is reported as the best seller on a tie.",
+    "why_plausible": "An agent tweaking the comparison to 'keep the best so far' makes it inclusive, not realising that flips the documented tie-breaking rule.",
+    "old": "        Some(b) => if b.qty > l.qty then Some(b) else Some(l),",
+    "new": "        Some(b) => if b.qty >= l.qty then Some(b) else Some(l),",
+    "py_old": "    if best.qty > l.qty:\n",
+    "py_new": "    if best.qty >= l.qty:\n"
+  },
+  {
+    "id": "a19",
+    "target": "receipt_row",
+    "area": "receipt",
+    "description": "The amount at the end of a receipt line shows the unit price rather than the unit price multiplied by the quantity ordered.",
+    "why_plausible": "An agent simplifying the string-building expression drops the quantity factor from the final amount, having just formatted the same unit price a few characters earlier.",
+    "old": "      ++ \" = \" ++ format_cents(p.unit_cents * l.qty),",
+    "new": "      ++ \" = \" ++ format_cents(p.unit_cents),",
+    "py_old": "        + format_cents(p.unit_cents * l.qty)\n",
+    "py_new": "        + format_cents(p.unit_cents)\n"
+  },
+  {
+    "id": "a20",
+    "target": "receipt",
+    "area": "receipt",
+    "description": "The receipt's total line is recomputed as subtotal plus shipping, so the printed total ignores the discount that the line above it reports.",
+    "why_plausible": "An agent making the receipt footer 'add up' recomputes the total from the rows it just printed and forgets to subtract the discount.",
+    "old": "            money_row(\"Shipping\", p.shipping),\n            money_row(\"total\", p.total)],",
+    "new": "            money_row(\"Shipping\", p.shipping),\n            money_row(\"total\", p.subtotal + p.shipping)],",
+    "py_old": "            money_row(\"Shipping\", p.shipping),\n            money_row(\"total\", p.total),\n",
+    "py_new": "            money_row(\"Shipping\", p.shipping),\n            money_row(\"total\", p.subtotal + p.shipping),\n"
+  }
+]

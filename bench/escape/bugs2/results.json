@@ -1,0 +1,506 @@
+[
+  {
+    "id": "c01",
+    "target": "can_transition",
+    "area": "orders",
+    "description": "Adds a Refunded state to OrderState and wires it into state_name and the Shipped transition row, but never adds a Refunded arm to the outer match of can_transition, so a refunded order has no transition rule at all.",
+    "weft": {
+      "verdict": "CHECKER",
+      "checker_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c01/weft/core.weft\",\"ok\":false,\"error\":{\"rule\":\"W24\",\"message\":\"match is not exhaustive\",\"span\":{\"line\":228,\"col\":3,\"endLine\":233,\"endCol\":4},\"hint\":\"unhandled: Refunded\"}}\n",
+      "tests_out": "",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "CHECKER",
+      "checker_out": "core.py:541: error: Argument 1 to \"assert_never\" has incompatible type \"Literal[OrderState.REFUNDED]\"; expected \"Never\"  [arg-type]\ncore.py:598: error: Argument 1 to \"assert_never\" has incompatible type \"Literal[OrderState.REFUNDED]\"; expected \"Never\"  [arg-type]\ncore.py:633: error: Argument 1 to \"assert_never\" has incompatible type \"Literal[OrderState.REFUNDED]\"; expected \"Never\"  [arg-type]\nFound 3 errors in 1 file (checked 2 source files)\n",
+      "tests_out": "",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "uncomparable(weft-rejected)"
+  },
+  {
+    "id": "c02",
+    "target": "order_revenue",
+    "area": "reporting",
+    "description": "Replaces the catch-all arm of order_revenue with an explicit per-state listing so that new states must be handled deliberately, but only lists Draft and drops the Cancelled case entirely.",
+    "weft": {
+      "verdict": "CHECKER",
+      "checker_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c02/weft/core.weft\",\"ok\":false,\"error\":{\"rule\":\"W24\",\"message\":\"match is not exhaustive\",\"span\":{\"line\":302,\"col\":3,\"endLine\":306,\"endCol\":4},\"hint\":\"unhandled: Cancelled\"}}\n",
+      "tests_out": "",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "CHECKER",
+      "checker_out": "core.py:621: error: Argument 1 to \"assert_never\" has incompatible type \"Literal[OrderState.CANCELLED]\"; expected \"Never\"  [arg-type]\nFound 1 error in 1 file (checked 2 source files)\n",
+      "tests_out": "",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "uncomparable(weft-rejected)"
+  },
+  {
+    "id": "c03",
+    "target": "take_stock",
+    "area": "stock",
+    "description": "Adds a debug log line inside take_stock so inventory movements can be traced, turning a pure inventory helper into one that performs IO on every call.",
+    "weft": {
+      "verdict": "CHECKER",
+      "checker_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c03/weft/core.weft\",\"ok\":false,\"error\":{\"rule\":\"W3\",\"message\":\"unknown name `io`\",\"span\":{\"line\":76,\"col\":17,\"endLine\":76,\"endCol\":19}}}\n",
+      "tests_out": "",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "ESCAPED",
+      "checker_out": "",
+      "tests_out": "..........................................................               [100%]\n58 passed in 1.56s\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "uncomparable(weft-rejected)"
+  },
+  {
+    "id": "c04",
+    "target": "receipt",
+    "area": "receipt",
+    "description": "Stamps the receipt header with the current wall-clock time, making a pure formatting function read an ambient clock.",
+    "weft": {
+      "verdict": "CHECKER",
+      "checker_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c04/weft/core.weft\",\"ok\":false,\"error\":{\"rule\":\"W3\",\"message\":\"unknown name `io`\",\"span\":{\"line\":363,\"col\":37,\"endLine\":363,\"endCol\":39}}}\n",
+      "tests_out": "",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "ESCAPED",
+      "checker_out": "",
+      "tests_out": "..........................................................               [100%]\n58 passed in 1.52s\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "uncomparable(weft-rejected)"
+  },
+  {
+    "id": "c05",
+    "target": "cancel_and_restock",
+    "area": "orders",
+    "description": "Makes cancellation resilient by catching a restock failure and substituting the untouched inventory, so an order can be cancelled while its units are silently never returned to stock.",
+    "weft": {
+      "verdict": "ESCAPED",
+      "checker_out": "",
+      "tests_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c05/weft/core.weft\",\"tests\":58,\"passed\":58}\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "ESCAPED",
+      "checker_out": "",
+      "tests_out": "..........................................................               [100%]\n58 passed in 1.55s\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "identical"
+  },
+  {
+    "id": "c06",
+    "target": "cart_subtotal",
+    "area": "cart",
+    "description": "Treats a line whose sku is missing from the catalog as costing zero instead of propagating the lookup failure, so a cart containing an unknown sku prices successfully at an under-count.",
+    "weft": {
+      "verdict": "TESTS",
+      "checker_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c06/weft/core.weft\",\"ok\":true,\"defs\":47,\"tests\":58,\"holes\":0}\n",
+      "tests_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c06/weft/core.weft\",\"test\":\"cart subtotal unknown sku errs\",\"passed\":false,\"detail\":\"returned false\"}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c06/weft/core.weft\",\"tests\":58,\"passed\":57}\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "TESTS",
+      "checker_out": "Success: no issues found in 2 source files\n",
+      "tests_out": "......................F...................................               [100%]\n================================== FAILURES ===================================\n_____________________ test_cart_subtotal_unknown_sku_errs _____________________\n\n    def test_cart_subtotal_unknown_sku_errs() -> None:\n        \"\"\"cart subtotal unknown sku errs\"\"\"\n>       with pytest.raises(StoreError) as excinfo:\n             ^^^^^^^^^^^^^^^^^^^^^^^^^\nE       Failed: DID NOT RAISE <class 'core.StoreError'>\n\ntest_core.py:208: Failed\n=========================== short test summary info ===========================\nFAILED test_core.py::test_cart_subtotal_unknown_sku_errs - Failed: DID NOT RA...\n1 failed, 57 passed in 1.85s\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "identical"
+  },
+  {
+    "id": "c07",
+    "target": "take_stock",
+    "area": "stock",
+    "description": "Adds a five-unit backorder allowance to the shortage check in take_stock, so a take that exceeds the shelf count is accepted and builds a Stock record with a negative qty.",
+    "weft": {
+      "verdict": "TESTS",
+      "checker_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c07/weft/core.weft\",\"ok\":true,\"defs\":48,\"tests\":58,\"holes\":0}\n",
+      "tests_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c07/weft/core.weft\",\"test\":\"take stock reports insufficiency\",\"passed\":false,\"detail\":\"halted: [W42] invariant of `Stock` violated at construction\"}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c07/weft/core.weft\",\"tests\":58,\"passed\":57}\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "TESTS",
+      "checker_out": "Success: no issues found in 2 source files\n",
+      "tests_out": "............F.............................................               [100%]\n================================== FAILURES ===================================\n____________________ test_take_stock_reports_insufficiency ____________________\n\n    def test_take_stock_reports_insufficiency() -> None:\n        \"\"\"take stock reports insufficiency\"\"\"\n        with pytest.raises(StoreError) as excinfo:\n>           take_stock(initial_stock, \"POT-001\", 5)\n\ntest_core.py:140: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\ncore.py:244: in take_stock\n    return tuple(\ncore.py:245: in <genexpr>\n    Stock(sku=s.sku, qty=s.qty - qty) if s.sku == sku else s for s in inv\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n<string>:5: in __init__\n    ???\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\n\nself = Stock(sku='POT-001', qty=-1)\n\n    def __post_init__(self) -> None:\n        if not (self.qty >= 0):\n>           raise ValueError(\n                \"[W42] invariant violation for Stock: qty >= 0 \"\n                f\"(sku = {self.sku!r}, qty = {self.qty})\"\n            )\nE           ValueError: [W42] invariant violation for Stock: qty >= 0 (sku = 'POT-001', qty = -1)\n\ncore.py:192: ValueError\n=========================== short test summary info ===========================\nFAILED test_core.py::test_take_stock_reports_insufficiency - ValueError: [W42...\n1 failed, 57 passed in 1.47s\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "identical"
+  },
+  {
+    "id": "c08",
+    "target": "receipt",
+    "area": "receipt",
+    "description": "Renders the receipt's discount line as a negative amount, feeding a negative cents value to the money formatter that is documented to take only non-negative amounts.",
+    "weft": {
+      "verdict": "TESTS",
+      "checker_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c08/weft/core.weft\",\"ok\":true,\"defs\":47,\"tests\":58,\"holes\":0}\n",
+      "tests_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c08/weft/core.weft\",\"test\":\"receipt shows zero shipping when waived\",\"passed\":false,\"detail\":\"halted: [W28] contract violated calling `money_row`\"}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c08/weft/core.weft\",\"tests\":58,\"passed\":57}\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "TESTS",
+      "checker_out": "Success: no issues found in 2 source files\n",
+      "tests_out": "......................................F...................               [100%]\n================================== FAILURES ===================================\n________________ test_receipt_shows_zero_shipping_when_waived _________________\n\n    def test_receipt_shows_zero_shipping_when_waived() -> None:\n        \"\"\"receipt shows zero shipping when waived\"\"\"\n>       r = receipt(new_order(22, add_to_cart((), \"POT-001\", 5)), ())\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\ntest_core.py:318: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\ncore.py:713: in receipt\n    money_row(\"discount\", -p.discount),\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\n\nlabel = 'discount', cents = -1600\n\n    def money_row(label: str, cents: int) -> str:\n        \"\"\"A labelled money row for the receipt footer.\"\"\"\n        if not (cents >= 0):\n>           raise ValueError(\n                f\"[W28] contract violation in money_row: cents >= 0 (cents = {cents})\"\n            )\nE           ValueError: [W28] contract violation in money_row: cents >= 0 (cents = -1600)\n\ncore.py:696: ValueError\n=========================== short test summary info ===========================\nFAILED test_core.py::test_receipt_shows_zero_shipping_when_waived - ValueErro...\n1 failed, 57 passed in 1.47s\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "identical"
+  },
+  {
+    "id": "c09",
+    "target": "shipping_fee",
+    "area": "pricing",
+    "description": "Lifts the free-shipping threshold into a named constant expressed in dollars while the value it is compared against is still in cents, so shipping is waived from $3.00 upward.",
+    "weft": {
+      "verdict": "TESTS",
+      "checker_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c09/weft/core.weft\",\"ok\":true,\"defs\":48,\"tests\":58,\"holes\":0}\n",
+      "tests_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c09/weft/core.weft\",\"test\":\"price cart combines tier and coupon discounts\",\"passed\":false,\"detail\":\"returned false\"}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c09/weft/core.weft\",\"test\":\"shipping fee applied below threshold\",\"passed\":false,\"detail\":\"returned false\"}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c09/weft/core.weft\",\"test\":\"price cart charges shipping below threshold\",\"passed\":false,\"detail\":\"returned false\"}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c09/weft/core.weft\",\"test\":\"receipt shows shipping fee when charged\",\"passed\":false,\"detail\":\"returned false\"}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c09/weft/core.weft\",\"test\":\"place order takes stock and prices total\",\"passed\":false,\"detail\":\"returned false\"}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c09/weft/core.weft\",\"tests\":58,\"passed\":53}\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "TESTS",
+      "checker_out": "Success: no issues found in 2 source files\n",
+      "tests_out": "...............................FF..F.F.....F..............               [100%]\n================================== FAILURES ===================================\n_____________ test_price_cart_combines_tier_and_coupon_discounts ______________\n\n    def test_price_cart_combines_tier_and_coupon_discounts() -> None:\n        \"\"\"price cart combines tier and coupon discounts\"\"\"\n>       assert price_cart(\n            add_to_cart((), \"POT-001\", 2), (make_coupon(\"POT-001\", 10),)\n        ) == Pricing(subtotal=12800, discount=1920, shipping=500, total=11380)\nE       AssertionError: assert Pricing(subto..., total=10880) == Pricing(subto..., total=11380)\nE         \nE         Omitting 2 identical items, use -vv to show\nE         Differing attributes:\nE         ['shipping', 'total']\nE         \nE         Drill down into differing attribute shipping:\nE           shipping: 0 != 500...\nE         \nE         ...Full output truncated (3 lines hidden), use '-vv' to show\n\ntest_core.py:276: AssertionError\n__________________ test_shipping_fee_applied_below_threshold __________________\n\n    def test_shipping_fee_applied_below_threshold() -> None:\n        \"\"\"shipping fee applied below threshold\"\"\"\n>       assert shipping_fee(29999) == 500\nE       assert 0 == 500\nE        +  where 0 = shipping_fee(29999)\n\ntest_core.py:283: AssertionError\n______________ test_price_cart_charges_shipping_below_threshold _______________\n\n    def test_price_cart_charges_shipping_below_threshold() -> None:\n        \"\"\"price cart charges shipping below threshold\"\"\"\n>       assert price_cart(add_to_cart((), \"TEA-001\", 2), ()) == Pricing(\n            subtotal=2500, discount=0, shipping=500, total=3000\n        )\nE       AssertionError: assert Pricing(subto...0, total=2500) == Pricing(subto...0, total=3000)\nE         \nE         Omitting 2 identical items, use -vv to show\nE         Differing attributes:\nE         ['shipping', 'total']\nE         \nE         Drill down into differing attribute shipping:\nE           shipping: 0 != 500...\nE         \nE         ...Full output truncated (3 lines hidden), use '-vv' to show\n\ntest_core.py:298: AssertionError\n________________ test_receipt_shows_shipping_fee_when_charged _________________\n\n    def test_receipt_shows_shipping_fee_when_charged() -> None:\n        \"\"\"receipt shows shipping fee when charged\"\"\"\n        r = receipt(new_order(21, add_to_cart((), \"TEA-001\", 2)), ())\n>       assert \"Shipping: $5.00\" in r and \"total: $30.00\" in r\nE       AssertionError: assert ('Shipping: $5.00' in '=== order #21 (draft) ===\\n  Green Tea Tin x 2 @ $12.50 = $25.00\\n  subtotal: $25.00\\n  discount: $0.00\\n  Shipping: $0.00\\n  total: $25.00')\n\ntest_core.py:313: AssertionError\n________________ test_place_order_takes_stock_and_prices_total ________________\n\n    def test_place_order_takes_stock_and_prices_total() -> None:\n        \"\"\"place order takes stock and prices total\"\"\"\n        pl = place_order(new_order(2, add_to_cart((), \"MUG-001\", 2)), initial_stock, ())\n>       assert (\n            stock_qty(pl.inv, \"MUG-001\") == 10\n            and pl.order.state == OrderState.PLACED\n            and pl.order.total_cents == 4100\n        )\nE       AssertionError: assert (10 == 10 and <OrderState.PLACED: 2> == <OrderState.PLACED: 2> and 3600 == 4100)\nE        +  where 10 = stock_qty((Stock(sku='TEA-001', qty=40), Stock(sku='TEA-002', qty=25), Stock(sku='MUG-001', qty=10), Stock(sku='POT-001', qty=4), Stock(sku='HNY-001', qty=30), Stock(sku='KTL-001', qty=6)), 'MUG-001')\nE        +    where (Stock(sku='TEA-001', qty=40), Stock(sku='TEA-002', qty=25), Stock(sku='MUG-001', qty=10), Stock(sku='POT-001', qty=4), Stock(sku='HNY-001', qty=30), Stock(sku='KTL-001', qty=6)) = Placement(order=Order(id=2, lines=(Line(sku='MUG-001', qty=2),), state=<OrderState.PLACED: 2>, total_cents=3600), inv=... Stock(sku='MUG-001', qty=10), Stock(sku='POT-001', qty=4), Stock(sku='HNY-001', qty=30), Stock(sku='KTL-001', qty=6))).inv\nE        +  and   <OrderState.PLACED: 2> = Order(id=2, lines=(Line(sku='",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "identical"
+  },
+  {
+    "id": "c10",
+    "target": "line_cost",
+    "area": "cart",
+    "description": "Switches line_cost from the unit_price helper to product_or_err so the product record is available, then multiplies the whole Product record by the quantity instead of its unit_cents field.",
+    "weft": {
+      "verdict": "CHECKER",
+      "checker_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c10/weft/core.weft\",\"ok\":false,\"error\":{\"rule\":\"W18\",\"message\":\"type mismatch \",\"span\":{\"line\":123,\"col\":14,\"endLine\":123,\"endCol\":19},\"expected\":\"{name: Text, sku: Text, unit_cents: Int}\",\"actual\":\"Int\"}}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/c10/weft/core.weft\",\"ok\":false,\"error\":{\"rule\":\"W25\",\"message\":\"arithmetic needs Int with Int or Float with Float\",\"span\":{\"line\":123,\"col\":6,\"endLine\":123,\"endCol\":19},\"actual\":\"{name: Text, sku: Text, unit_cents: Int}\",\"hint\":\"there are no implicit conversions [W15]; use int_to_float / float_to_int\"}}\n",
+      "tests_out": "",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "CHECKER",
+      "checker_out": "core.py:316: error: Unsupported operand types for * (\"Product\" and \"int\")  [operator]\nFound 1 error in 1 file (checked 2 source files)\n",
+      "tests_out": "",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "uncomparable(weft-rejected)"
+  },
+  {
+    "id": "c11",
+    "target": "sku_totals",
+    "area": "reporting",
+    "description": "Adds an optional running-tally parameter to sku_totals so several batches of orders can be merged, but defaults it to a mutable list that is shared by every call, so each call accumulates the previous calls' totals.",
+    "weft": {
+      "verdict": "N/A",
+      "checker_out": "Weft has no mutation, no mutable containers, and no default parameter values [W1]/[W16], so a value shared and accumulated across separate calls cannot be written at all.",
+      "tests_out": "",
+      "probe_changed": false,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "TESTS",
+      "checker_out": "Success: no issues found in 2 source files\n",
+      "tests_out": "...................................................FFFF...               [100%]\n================================== FAILURES ===================================\n________________ test_best_seller_tie_goes_to_first_appearance ________________\n\n    def test_best_seller_tie_goes_to_first_appearance() -> None:\n        \"\"\"best seller tie goes to first appearance\"\"\"\n>       assert (\n            best_seller(\n                (\n                    Order(\n                        id=1,\n                        lines=(Line(sku=\"A\", qty=3),),\n                        state=OrderState.PLACED,\n                        total_cents=10,\n                    ),\n                    Order(\n                        id=2,\n                        lines=(Line(sku=\"B\", qty=3),),\n                        state=OrderState.PLACED,\n                        total_cents=10,\n                    ),\n                )\n            )\n            == \"A\"\n        )\nE       AssertionError: assert 'B' == 'A'\nE         \nE         - A\nE         + B\n\ntest_core.py:446: AssertionError\n____________________ test_best_seller_merges_across_orders ____________________\n\n    def test_best_seller_merges_across_orders() -> None:\n        \"\"\"best seller merges across orders\"\"\"\n>       assert (\n            best_seller(\n                (\n                    Order(\n                        id=1,\n                        lines=(Line(sku=\"A\", qty=2),),\n                        state=OrderState.PLACED,\n                        total_cents=10,\n                    ),\n                    Order(\n                        id=2,\n                        lines=(Line(sku=\"B\", qty=3),),\n                        state=OrderState.PLACED,\n                        total_cents=10,\n                    ),\n                    Order(\n                        id=3,\n                        lines=(Line(sku=\"A\", qty=2),),\n                        state=OrderState.SHIPPED,\n                        total_cents=10,\n                    ),\n                )\n            )\n            == \"A\"\n        )\nE       AssertionError: assert 'B' == 'A'\nE         \nE         - A\nE         + B\n\ntest_core.py:469: AssertionError\n_____________________ test_cancelled_orders_sell_nothing ______________________\n\n    def test_cancelled_orders_sell_nothing() -> None:\n        \"\"\"cancelled orders sell nothing\"\"\"\n>       assert (\n            best_seller(\n                (\n                    Order(\n                        id=1,\n                        lines=(Line(sku=\"A\", qty=9),),\n                        state=OrderState.CANCELLED,\n                        total_cents=10,\n                    ),\n                )\n            )\n            is None\n        )\nE       AssertionError: assert 'B' is None\nE        +  where 'B' = best_seller((Order(id=1, lines=(Line(sku='A', qty=9),), state=<OrderState.CANCELLED: 4>, total_cents=10),))\n\ntest_core.py:498: AssertionError\n____________________ test_best_seller_of_no_orders_is_none ____________________\n\n    def test_best_seller_of_no_orders_is_none() -> None:\n        \"\"\"best seller of no orders is None\"\"\"\n>       assert best_seller(()) is None\nE       AssertionError: assert 'B' is None\nE        +  where 'B' = best_seller(())\n\ntest_core.py:515: AssertionError\n=========================== short test summary info ===========================\nFAILED test_core.py::test_best_seller_tie_goes_to_first_appearance - Assertio...\nFAILED test_core.py::test_best_seller_merges_across_orders - AssertionError: ...\nFAILED test_core.py::test_cancelled_orders_sell_nothing - AssertionError: ass...\nFAILED test_core.py::test_best_seller_of_no_orders_is_none - AssertionError: ...\n4 failed, 54 passed in 1.96s\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "one-arm-only"
+  },
+  {
+    "id": "c12",
+    "target": "price_cart",
+    "area": "pricing",
+    "description": "Memoises price_cart in a module-level dict keyed on the cart alone, so the shared cache hands back a previously computed Pricing for the same cart even when a different coupon set is supplied.",
+    "weft": {
+      "verdict": "N/A",
+      "checker_out": "Weft is deterministic with no mutation and no global state [W1], so a cache that persists across calls cannot be expressed; every def is a pure function of its arguments.",
+      "tests_out": "",
+      "probe_changed": false,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "ESCAPED",
+      "checker_out": "",
+      "tests_out": "..........................................................               [100%]\n58 passed in 1.62s\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "one-arm-only"
+  },
+  {
+    "id": "d01",
+    "target": "state_name",
+    "area": "orders",
+    "description": "Adding a Refunded order state (Shipped -> Refunded) for the partial-refund feature wires the new variant into can_transition but never adds a state_name arm for it.",
+    "weft": {
+      "verdict": "CHECKER",
+      "checker_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d01/weft/core.weft\",\"ok\":false,\"error\":{\"rule\":\"W24\",\"message\":\"match is not exhaustive\",\"span\":{\"line\":218,\"col\":3,\"endLine\":223,\"endCol\":4},\"hint\":\"unhandled: Refunded\"}}\n",
+      "tests_out": "",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "CHECKER",
+      "checker_out": "core.py:497: error: Argument 1 to \"assert_never\" has incompatible type \"Literal[OrderState.REFUNDED]\"; expected \"Never\"  [arg-type]\ncore.py:598: error: Argument 1 to \"assert_never\" has incompatible type \"Literal[OrderState.REFUNDED]\"; expected \"Never\"  [arg-type]\ncore.py:633: error: Argument 1 to \"assert_never\" has incompatible type \"Literal[OrderState.REFUNDED]\"; expected \"Never\"  [arg-type]\nFound 3 errors in 1 file (checked 2 source files)\n",
+      "tests_out": "",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "uncomparable(weft-rejected)"
+  },
+  {
+    "id": "d02",
+    "target": "wrap_fee",
+    "area": "pricing",
+    "description": "A gift-wrap feature introduces a three-way WrapStyle (Plain/Gift/Luxury) but wrap_fee only prices Plain and Gift, leaving the newly added Luxury option unhandled.",
+    "weft": {
+      "verdict": "CHECKER",
+      "checker_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d02/weft/core.weft\",\"ok\":false,\"error\":{\"rule\":\"W24\",\"message\":\"match is not exhaustive\",\"span\":{\"line\":198,\"col\":3,\"endLine\":201,\"endCol\":4},\"hint\":\"unhandled: Luxury\"}}\n",
+      "tests_out": "",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "CHECKER",
+      "checker_out": "core.py:458: error: Argument 1 to \"assert_never\" has incompatible type \"Literal[WrapStyle.LUXURY]\"; expected \"Never\"  [arg-type]\nFound 1 error in 1 file (checked 2 source files)\n",
+      "tests_out": "",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "uncomparable(weft-rejected)"
+  },
+  {
+    "id": "d03",
+    "target": "tier_discount",
+    "area": "pricing",
+    "description": "While debugging the tier thresholds the agent leaves a diagnostic print inside tier_discount, so a pure pricing calculation now performs IO (and in Weft demands an Io capability from every caller).",
+    "weft": {
+      "verdict": "CHECKER",
+      "checker_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d03/weft/core.weft\",\"ok\":false,\"error\":{\"rule\":\"W19\",\"message\":\"call expects 2 argument(s), got 1\",\"span\":{\"line\":200,\"col\":14,\"endLine\":200,\"endCol\":32},\"expected\":\"(Io, Int) -> Int\"}}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d03/weft/core.weft\",\"ok\":false,\"error\":{\"rule\":\"W19\",\"message\":\"call expects 2 argument(s), got 1\",\"span\":{\"line\":488,\"col\":3,\"endLine\":488,\"endCol\":23},\"expected\":\"(Io, Int) -> Int\"}}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d03/weft/core.weft\",\"ok\":false,\"error\":{\"rule\":\"W19\",\"message\":\"call expects 2 argument(s), got 1\",\"span\":{\"line\":491,\"col\":11,\"endLine\":491,\"endCol\":27},\"expected\":\"(Io, Int) -> Int\"}}\n",
+      "tests_out": "",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "ESCAPED",
+      "checker_out": "",
+      "tests_out": "..........................................................               [100%]\n58 passed in 1.54s\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "uncomparable(weft-rejected)"
+  },
+  {
+    "id": "d04",
+    "target": "restock",
+    "area": "stock",
+    "description": "An audit-trail feature logs every restocked line from inside the per-item mapping step, so the mapping closure itself performs IO over a capability threaded into what was a pure inventory update.",
+    "weft": {
+      "verdict": "CHECKER",
+      "checker_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d04/weft/core.weft\",\"ok\":false,\"error\":{\"rule\":\"W33\",\"message\":\"lambda captures capability `io`\",\"span\":{\"line\":87,\"col\":23,\"endLine\":87,\"endCol\":25},\"hint\":\"pass the capability as a parameter of a named def instead\"}}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d04/weft/core.weft\",\"ok\":false,\"error\":{\"rule\":\"W19\",\"message\":\"call expects 4 argument(s), got 3\",\"span\":{\"line\":262,\"col\":18,\"endLine\":262,\"endCol\":44},\"expected\":\"(Io, List[Stock], Text, Int) -> Result[List[Stock], Text]\"}}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d04/weft/core.weft\",\"ok\":false,\"error\":{\"rule\":\"W19\",\"message\":\"call expects 4 argument(s), got 3\",\"span\":{\"line\":438,\"col\":3,\"endLine\":438,\"endCol\":36},\"expected\":\"(Io, List[Stock], Text, Int) -> Result[List[Stock], Text]\"}}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d04/weft/core.weft\",\"ok\":false,\"error\":{\"rule\":\"W19\",\"message\":\"call expects 4 argument(s), got 3\",\"span\":{\"line\":441,\"col\":9,\"endLine\":441,\"endCol\":45},\"expected\":\"(Io, List[Stock], Text, Int) -> Result[List[Stock], Text]\"}}\n",
+      "tests_out": "",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "ESCAPED",
+      "checker_out": "",
+      "tests_out": "..........................................................               [100%]\n58 passed in 1.53s\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "uncomparable(weft-rejected)"
+  },
+  {
+    "id": "d05",
+    "target": "cart_subtotal",
+    "area": "cart",
+    "description": "A 'do not let one delisted product break the whole basket' change makes cart_subtotal swallow the unknown-sku lookup failure and price that line at zero instead of propagating the error.",
+    "weft": {
+      "verdict": "TESTS",
+      "checker_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d05/weft/core.weft\",\"ok\":true,\"defs\":47,\"tests\":58,\"holes\":0}\n",
+      "tests_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d05/weft/core.weft\",\"test\":\"cart subtotal unknown sku errs\",\"passed\":false,\"detail\":\"returned false\"}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d05/weft/core.weft\",\"tests\":58,\"passed\":57}\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "TESTS",
+      "checker_out": "Success: no issues found in 2 source files\n",
+      "tests_out": "......................F...................................               [100%]\n================================== FAILURES ===================================\n_____________________ test_cart_subtotal_unknown_sku_errs _____________________\n\n    def test_cart_subtotal_unknown_sku_errs() -> None:\n        \"\"\"cart subtotal unknown sku errs\"\"\"\n>       with pytest.raises(StoreError) as excinfo:\n             ^^^^^^^^^^^^^^^^^^^^^^^^^\nE       Failed: DID NOT RAISE <class 'core.StoreError'>\n\ntest_core.py:208: Failed\n=========================== short test summary info ===========================\nFAILED test_core.py::test_cart_subtotal_unknown_sku_errs - Failed: DID NOT RA...\n1 failed, 57 passed in 1.73s\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "identical"
+  },
+  {
+    "id": "d06",
+    "target": "place_order",
+    "area": "orders",
+    "description": "Making place_order idempotent for retried requests turns the already-placed case into a success that returns the order and untouched inventory, so a double submission reports success without pricing or reserving anything.",
+    "weft": {
+      "verdict": "TESTS",
+      "checker_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d06/weft/core.weft\",\"ok\":true,\"defs\":47,\"tests\":58,\"holes\":0}\n",
+      "tests_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d06/weft/core.weft\",\"test\":\"an order cannot be placed twice\",\"passed\":false,\"detail\":\"returned false\"}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d06/weft/core.weft\",\"tests\":58,\"passed\":57}\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "TESTS",
+      "checker_out": "Success: no issues found in 2 source files\n",
+      "tests_out": "..............................................F...........               [100%]\n================================== FAILURES ===================================\n____________________ test_an_order_cannot_be_placed_twice _____________________\n\n    def test_an_order_cannot_be_placed_twice() -> None:\n        \"\"\"an order cannot be placed twice\"\"\"\n        pl = place_order(new_order(5, add_to_cart((), \"HNY-001\", 1)), initial_stock, ())\n>       with pytest.raises(StoreError) as excinfo:\n             ^^^^^^^^^^^^^^^^^^^^^^^^^\nE       Failed: DID NOT RAISE <class 'core.StoreError'>\n\ntest_core.py:378: Failed\n=========================== short test summary info ===========================\nFAILED test_core.py::test_an_order_cannot_be_placed_twice - Failed: DID NOT R...\n1 failed, 57 passed in 1.75s\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "identical"
+  },
+  {
+    "id": "d07",
+    "target": "make_coupon",
+    "area": "pricing",
+    "description": "A staff-override feature lets a staff flag bypass the coupon validation entirely, so make_coupon will happily build Coupon values with a percent outside the stated 1..90 range (including negative or above 100).",
+    "weft": {
+      "verdict": "CHECKER",
+      "checker_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d07/weft/core.weft\",\"ok\":false,\"error\":{\"rule\":\"W19\",\"message\":\"call expects 3 argument(s), got 2\",\"span\":{\"line\":493,\"col\":25,\"endLine\":493,\"endCol\":51},\"expected\":\"(Text, Bool, Int) -> {percent: Int, sku: Text}\"}}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d07/weft/core.weft\",\"ok\":false,\"error\":{\"rule\":\"W19\",\"message\":\"call expects 3 argument(s), got 2\",\"span\":{\"line\":496,\"col\":25,\"endLine\":496,\"endCol\":51},\"expected\":\"(Text, Bool, Int) -> {percent: Int, sku: Text}\"}}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d07/weft/core.weft\",\"ok\":false,\"error\":{\"rule\":\"W19\",\"message\":\"call expects 3 argument(s), got 2\",\"span\":{\"line\":502,\"col\":46,\"endLine\":502,\"endCol\":72},\"expected\":\"(Text, Bool, Int) -> {percent: Int, sku: Text}\"}}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d07/weft/core.weft\",\"ok\":false,\"error\":{\"rule\":\"W19\",\"message\":\"call expects 3 argument(s), got 2\",\"span\":{\"line\":650,\"col\":18,\"endLine\":650,\"endCol\":44},\"expected\":\"(Text, Bool, Int) -> {percent: Int, sku: Text}\"}}\n",
+      "tests_out": "",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "CHECKER",
+      "checker_out": "core.py:730: error: Missing positional argument \"staff\" in call to \"make_coupon\"  [call-arg]\ntest_core.py:249: error: Missing positional argument \"staff\" in call to \"make_coupon\"  [call-arg]\ntest_core.py:259: error: Missing positional argument \"staff\" in call to \"make_coupon\"  [call-arg]\ntest_core.py:277: error: Missing positional argument \"staff\" in call to \"make_coupon\"  [call-arg]\nFound 4 errors in 2 files (checked 2 source files)\n",
+      "tests_out": "",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "uncomparable(weft-rejected)"
+  },
+  {
+    "id": "d08",
+    "target": "take_stock",
+    "area": "stock",
+    "description": "A backorder feature relaxes take_stock so that only untracked skus fail, which means a tracked sku short of units is decremented past zero and a Stock record is built with a negative qty.",
+    "weft": {
+      "verdict": "TESTS",
+      "checker_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d08/weft/core.weft\",\"ok\":true,\"defs\":47,\"tests\":58,\"holes\":0}\n",
+      "tests_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d08/weft/core.weft\",\"test\":\"take stock reports insufficiency\",\"passed\":false,\"detail\":\"halted: [W42] invariant of `Stock` violated at construction\"}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d08/weft/core.weft\",\"test\":\"place order fails on shortage\",\"passed\":false,\"detail\":\"halted: [W42] invariant of `Stock` violated at construction\"}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d08/weft/core.weft\",\"tests\":58,\"passed\":56}\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "TESTS",
+      "checker_out": "Success: no issues found in 2 source files\n",
+      "tests_out": "............F...............................F.............               [100%]\n================================== FAILURES ===================================\n____________________ test_take_stock_reports_insufficiency ____________________\n\n    def test_take_stock_reports_insufficiency() -> None:\n        \"\"\"take stock reports insufficiency\"\"\"\n        with pytest.raises(StoreError) as excinfo:\n>           take_stock(initial_stock, \"POT-001\", 5)\n\ntest_core.py:140: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\ncore.py:240: in take_stock\n    return tuple(\ncore.py:241: in <genexpr>\n    Stock(sku=s.sku, qty=s.qty - qty) if s.sku == sku else s for s in inv\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n<string>:5: in __init__\n    ???\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\n\nself = Stock(sku='POT-001', qty=-1)\n\n    def __post_init__(self) -> None:\n        if not (self.qty >= 0):\n>           raise ValueError(\n                \"[W42] invariant violation for Stock: qty >= 0 \"\n                f\"(sku = {self.sku!r}, qty = {self.qty})\"\n            )\nE           ValueError: [W42] invariant violation for Stock: qty >= 0 (sku = 'POT-001', qty = -1)\n\ncore.py:192: ValueError\n_____________________ test_place_order_fails_on_shortage ______________________\n\n    def test_place_order_fails_on_shortage() -> None:\n        \"\"\"place order fails on shortage\"\"\"\n        with pytest.raises(StoreError) as excinfo:\n>           place_order(new_order(3, add_to_cart((), \"POT-001\", 99)), initial_stock, ())\n\ntest_core.py:364: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\ncore.py:571: in place_order\n    taken = take_lines(inv, o.lines)\n            ^^^^^^^^^^^^^^^^^^^^^^^^\ncore.py:549: in take_lines\n    next_inv = take_stock(inv, l.sku, l.qty)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ncore.py:240: in take_stock\n    return tuple(\ncore.py:241: in <genexpr>\n    Stock(sku=s.sku, qty=s.qty - qty) if s.sku == sku else s for s in inv\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n<string>:5: in __init__\n    ???\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _\n\nself = Stock(sku='POT-001', qty=-95)\n\n    def __post_init__(self) -> None:\n        if not (self.qty >= 0):\n>           raise ValueError(\n                \"[W42] invariant violation for Stock: qty >= 0 \"\n                f\"(sku = {self.sku!r}, qty = {self.qty})\"\n            )\nE           ValueError: [W42] invariant violation for Stock: qty >= 0 (sku = 'POT-001', qty = -95)\n\ncore.py:192: ValueError\n=========================== short test summary info ===========================\nFAILED test_core.py::test_take_stock_reports_insufficiency - ValueError: [W42...\nFAILED test_core.py::test_place_order_fails_on_shortage - ValueError: [W42] i...\n2 failed, 56 passed in 2.56s\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "identical"
+  },
+  {
+    "id": "d09",
+    "target": "price_cart",
+    "area": "pricing",
+    "description": "The flat $3 gift-wrap fee is defined as the number 3 and added to the shipping component, mixing a dollar amount into a field and total that are specified in cents.",
+    "weft": {
+      "verdict": "TESTS",
+      "checker_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d09/weft/core.weft\",\"ok\":true,\"defs\":48,\"tests\":58,\"holes\":0}\n",
+      "tests_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d09/weft/core.weft\",\"test\":\"price cart combines tier and coupon discounts\",\"passed\":false,\"detail\":\"returned false\"}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d09/weft/core.weft\",\"test\":\"price cart charges shipping below threshold\",\"passed\":false,\"detail\":\"returned false\"}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d09/weft/core.weft\",\"test\":\"price cart waives shipping above threshold\",\"passed\":false,\"detail\":\"returned false\"}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d09/weft/core.weft\",\"test\":\"receipt shows shipping fee when charged\",\"passed\":false,\"detail\":\"returned false\"}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d09/weft/core.weft\",\"test\":\"receipt shows zero shipping when waived\",\"passed\":false,\"detail\":\"returned false\"}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d09/weft/core.weft\",\"test\":\"place order takes stock and prices total\",\"passed\":false,\"detail\":\"returned false\"}\n{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d09/weft/core.weft\",\"tests\":58,\"passed\":52}\n",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "TESTS",
+      "checker_out": "Success: no issues found in 2 source files\n",
+      "tests_out": "...............................F...FFFF....F..............               [100%]\n================================== FAILURES ===================================\n_____________ test_price_cart_combines_tier_and_coupon_discounts ______________\n\n    def test_price_cart_combines_tier_and_coupon_discounts() -> None:\n        \"\"\"price cart combines tier and coupon discounts\"\"\"\n>       assert price_cart(\n            add_to_cart((), \"POT-001\", 2), (make_coupon(\"POT-001\", 10),)\n        ) == Pricing(subtotal=12800, discount=1920, shipping=500, total=11380)\nE       AssertionError: assert Pricing(subto..., total=11383) == Pricing(subto..., total=11380)\nE         \nE         Omitting 2 identical items, use -vv to show\nE         Differing attributes:\nE         ['shipping', 'total']\nE         \nE         Drill down into differing attribute shipping:\nE           shipping: 503 != 500...\nE         \nE         ...Full output truncated (3 lines hidden), use '-vv' to show\n\ntest_core.py:276: AssertionError\n______________ test_price_cart_charges_shipping_below_threshold _______________\n\n    def test_price_cart_charges_shipping_below_threshold() -> None:\n        \"\"\"price cart charges shipping below threshold\"\"\"\n>       assert price_cart(add_to_cart((), \"TEA-001\", 2), ()) == Pricing(\n            subtotal=2500, discount=0, shipping=500, total=3000\n        )\nE       AssertionError: assert Pricing(subto...3, total=3003) == Pricing(subto...0, total=3000)\nE         \nE         Omitting 2 identical items, use -vv to show\nE         Differing attributes:\nE         ['shipping', 'total']\nE         \nE         Drill down into differing attribute shipping:\nE           shipping: 503 != 500...\nE         \nE         ...Full output truncated (3 lines hidden), use '-vv' to show\n\ntest_core.py:298: AssertionError\n_______________ test_price_cart_waives_shipping_above_threshold _______________\n\n    def test_price_cart_waives_shipping_above_threshold() -> None:\n        \"\"\"price cart waives shipping above threshold\"\"\"\n>       assert price_cart(add_to_cart((), \"POT-001\", 5), ()) == Pricing(\n            subtotal=32000, discount=1600, shipping=0, total=30400\n        )\nE       AssertionError: assert Pricing(subto..., total=30403) == Pricing(subto..., total=30400)\nE         \nE         Omitting 2 identical items, use -vv to show\nE         Differing attributes:\nE         ['shipping', 'total']\nE         \nE         Drill down into differing attribute shipping:\nE           shipping: 3 != 0...\nE         \nE         ...Full output truncated (3 lines hidden), use '-vv' to show\n\ntest_core.py:305: AssertionError\n________________ test_receipt_shows_shipping_fee_when_charged _________________\n\n    def test_receipt_shows_shipping_fee_when_charged() -> None:\n        \"\"\"receipt shows shipping fee when charged\"\"\"\n        r = receipt(new_order(21, add_to_cart((), \"TEA-001\", 2)), ())\n>       assert \"Shipping: $5.00\" in r and \"total: $30.00\" in r\nE       AssertionError: assert ('Shipping: $5.00' in '=== order #21 (draft) ===\\n  Green Tea Tin x 2 @ $12.50 = $25.00\\n  subtotal: $25.00\\n  discount: $0.00\\n  Shipping: $5.03\\n  total: $30.03')\n\ntest_core.py:313: AssertionError\n________________ test_receipt_shows_zero_shipping_when_waived _________________\n\n    def test_receipt_shows_zero_shipping_when_waived() -> None:\n        \"\"\"receipt shows zero shipping when waived\"\"\"\n        r = receipt(new_order(22, add_to_cart((), \"POT-001\", 5)), ())\n>       assert \"Shipping: $0.00\" in r and \"total: $304.00\" in r\nE       AssertionError: assert ('Shipping: $0.00' in '=== order #22 (draft) ===\\n  Cast Iron Teapot x 5 @ $64.00 = $320.00\\n  subtotal: $320.00\\n  discount: $16.00\\n  Shipping: $0.03\\n  total: $304.03')\n\ntest_core.py:319: AssertionError\n________________ test_place_order_takes_stock_and_prices_total ________________\n\n    def test_place_order_takes_stock_and_prices_total() -> None:\n        \"\"\"place order takes stock and prices total\"\"\"\n        pl = place_order(new_order(2, add_to_cart((), \"MUG-001\", 2)), initial_st",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "identical"
+  },
+  {
+    "id": "d10",
+    "target": "low_stock_skus",
+    "area": "stock",
+    "description": "A low-stock warning helper declared to return the list of low skus actually returns the filtered Stock records themselves, a list of records where a list of Text sku codes is promised.",
+    "weft": {
+      "verdict": "CHECKER",
+      "checker_out": "{\"file\":\"D:/Dev2/unknown/bench/escape/work/bugs2/d10/weft/core.weft\",\"ok\":false,\"error\":{\"rule\":\"W18\",\"message\":\"type mismatch \",\"span\":{\"line\":96,\"col\":3,\"endLine\":96,\"endCol\":40},\"expected\":\"List[Text]\",\"actual\":\"List[Stock]\"}}\n",
+      "tests_out": "",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "CHECKER",
+      "checker_out": "core.py:267: error: Generator has incompatible item type \"Stock\"; expected \"str\"  [misc]\nFound 1 error in 1 file (checked 2 source files)\n",
+      "tests_out": "",
+      "probe_changed": true,
+      "rule": ""
+    },
+    "paired": "uncomparable(weft-rejected)"
+  },
+  {
+    "id": "d11",
+    "target": "take_lines",
+    "area": "stock",
+    "description": "A low-stock warning feature collects messages into a caller-supplied list defaulted to [], so the single default list object is shared by every call and warnings accumulate across unrelated orders forever.",
+    "weft": {
+      "verdict": "N/A",
+      "checker_out": "Weft has no mutation, no mutable containers and no default arguments [W1]; every value is immutable, so there is no shared object for two calls to alias and no way for one call to observe another's appends.",
+      "tests_out": "",
+      "probe_changed": false,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "EQUIVALENT",
+      "checker_out": "",
+      "tests_out": "..........................................................               [100%]\n58 passed in 1.07s\n",
+      "probe_changed": false,
+      "rule": ""
+    },
+    "paired": "one-arm-only"
+  },
+  {
+    "id": "d12",
+    "target": "place_order",
+    "area": "orders",
+    "description": "An order audit trail is kept in a module-level list that place_order appends to and placed_orders hands back by reference, so callers share and can mutate the live log and the log leaks across every store, test and request.",
+    "weft": {
+      "verdict": "N/A",
+      "checker_out": "Weft forbids global state and mutation outright [W1]: a def is a pure value, there is no way to append to a top-level list or to hand a caller a reference that a later call can observe changing.",
+      "tests_out": "",
+      "probe_changed": false,
+      "rule": ""
+    },
+    "py": {
+      "verdict": "EQUIVALENT",
+      "checker_out": "",
+      "tests_out": "..........................................................               [100%]\n58 passed in 1.09s\n",
+      "probe_changed": false,
+      "rule": ""
+    },
+    "paired": "one-arm-only"
+  }
+]

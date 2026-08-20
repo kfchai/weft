@@ -1,0 +1,222 @@
+[
+  {
+    "id": "b01",
+    "target": "find_product",
+    "area": "catalog",
+    "description": "Product lookup by sku compares a lower-cased catalog sku against the caller's sku unchanged, so any lookup using the catalog's own upper-case sku spelling now finds nothing.",
+    "why_plausible": "Handed a request to make sku lookup case-insensitive, an agent normalizes the side it can see in the catalog literal and forgets the incoming argument also needs normalizing.",
+    "old": "  find(catalog, (p: Product) => p.sku == sku)",
+    "new": "  find(catalog, (p: Product) => to_lower(p.sku) == sku)",
+    "py_old": "    for p in catalog:\n        if p.sku == sku:\n            return p",
+    "py_new": "    for p in catalog:\n        if p.sku.lower() == sku:\n            return p"
+  },
+  {
+    "id": "b02",
+    "target": "unit_price",
+    "area": "catalog",
+    "description": "The unit price accessor returns the price converted to whole dollars instead of the cents every other part of the module expects, so all downstream money amounts shrink a hundredfold and truncate.",
+    "why_plausible": "Asked to 'expose prices in dollars', an agent that read only the catalog section converts inside the shared accessor rather than at the one presentation site that wanted dollars.",
+    "old": "  Ok(p.unit_cents)",
+    "new": "  Ok(p.unit_cents / 100)",
+    "py_old": "    p = product_or_err(sku)\n    return p.unit_cents",
+    "py_new": "    p = product_or_err(sku)\n    return _int_div(p.unit_cents, 100)"
+  },
+  {
+    "id": "b03",
+    "target": "pad2",
+    "area": "catalog",
+    "description": "The two-digit padding helper pads on the right instead of the left, so a cents remainder below ten is rendered as tens of cents (5 becomes \"50\" rather than \"05\").",
+    "why_plausible": "An agent fixing decimal formatting reads the fractional part as tenths rather than cents and 'corrects' the padding side accordingly.",
+    "old": "  if n < 10 then \"0\" ++ text_of_int(n) else text_of_int(n)",
+    "new": "  if n < 10 then text_of_int(n) ++ \"0\" else text_of_int(n)",
+    "py_old": "    if n < 10:\n        return \"0\" + str(n)\n    return str(n)",
+    "py_new": "    if n < 10:\n        return str(n) + \"0\"\n    return str(n)"
+  },
+  {
+    "id": "b04",
+    "target": "take_stock",
+    "area": "stock",
+    "description": "Taking stock now fails whenever the requested quantity equals the quantity on hand, so a sku can never be drawn down to exactly zero.",
+    "why_plausible": "Responding to an oversell bug report, an agent tightens the sufficiency comparison without checking that taking the last remaining units is legitimate.",
+    "old": "  if stock_qty(inv, sku) < qty",
+    "new": "  if stock_qty(inv, sku) <= qty",
+    "py_old": "    if stock_qty(inv, sku) < qty:",
+    "py_new": "    if stock_qty(inv, sku) <= qty:"
+  },
+  {
+    "id": "b05",
+    "target": "restock",
+    "area": "stock",
+    "description": "Restocking a sku the inventory does not track silently appends a new inventory record for it instead of reporting an error.",
+    "why_plausible": "An agent reading a request like 'restocking a newly added product should just work' adds auto-creation, unaware that callers rely on the error to reject unknown skus.",
+    "old": "    None => Err(\"cannot restock unknown sku: \" ++ sku),",
+    "new": "    None => Ok(append(inv, Stock{sku: sku, qty: qty})),",
+    "py_old": "    found = find_stock(inv, sku)\n    if found is None:\n        raise StoreError(\"cannot restock unknown sku: \" + sku)",
+    "py_new": "    found = find_stock(inv, sku)\n    if found is None:\n        return inv + (Stock(sku=sku, qty=qty),)"
+  },
+  {
+    "id": "b06",
+    "target": "find_stock",
+    "area": "stock",
+    "description": "The inventory record lookup ignores records whose quantity is zero, so a depleted sku is reported as untracked rather than as tracked with none on hand.",
+    "why_plausible": "Asked to stop showing sold-out products in an availability view, an agent filters inside the shared record finder instead of at that view, changing what 'the inventory tracks this sku' means for every other caller.",
+    "old": "  find(inv, (s: Stock) => s.sku == sku)",
+    "new": "  find(inv, (s: Stock) => s.sku == sku and s.qty > 0)",
+    "py_old": "    for s in inv:\n        if s.sku == sku:\n            return s",
+    "py_new": "    for s in inv:\n        if s.sku == sku and s.qty > 0:\n            return s"
+  },
+  {
+    "id": "b07",
+    "target": "add_to_cart",
+    "area": "cart",
+    "description": "Adding a sku that is already in the cart overwrites that line's quantity with the new quantity instead of adding to it.",
+    "why_plausible": "An agent implementing a 'set the quantity from the cart UI' request repurposes the existing add helper and does not notice the reporting code also uses it to accumulate units across orders.",
+    "old": "      if l.sku == sku then {..l, qty: l.qty + qty} else l),",
+    "new": "      if l.sku == sku then {..l, qty: qty} else l),",
+    "py_old": "        Line(sku=line.sku, qty=line.qty + qty) if line.sku == sku else line",
+    "py_new": "        Line(sku=line.sku, qty=qty) if line.sku == sku else line"
+  },
+  {
+    "id": "b08",
+    "target": "line_cost",
+    "area": "cart",
+    "description": "A cart line whose sku is not in the catalog is priced at zero instead of producing an error, so carts containing unknown skus price successfully at a reduced total.",
+    "why_plausible": "Given a report that receipts blow up on discontinued products, an agent makes the line price degrade gracefully without realizing this error is the pricing pipeline's only guard against unknown skus.",
+    "old": "  let price = unit_price(l.sku)?;",
+    "new": "  let price = match find_product(l.sku) { Some(p) => p.unit_cents, None => 0 };",
+    "py_old": "    price = unit_price(l.sku)\n    return price * l.qty",
+    "py_new": "    p = find_product(l.sku)\n    price = p.unit_cents if p is not None else 0\n    return price * l.qty"
+  },
+  {
+    "id": "b09",
+    "target": "cart_count",
+    "area": "cart",
+    "description": "The cart count returns the number of distinct cart lines rather than the total number of units across those lines.",
+    "why_plausible": "An agent adding a cart badge reads 'number of items in the cart' as the number of rows displayed and rewrites the shared helper to suit that one caller.",
+    "old": "  fold(cart, 0, (acc: Int, l: Line) => acc + l.qty)",
+    "new": "  len(cart)",
+    "py_old": "    acc = 0\n    for line in cart:\n        acc = acc + line.qty\n    return acc",
+    "py_new": "    return len(cart)"
+  },
+  {
+    "id": "b10",
+    "target": "line_coupon_discount",
+    "area": "pricing",
+    "description": "The per-line coupon discount is multiplied by the line quantity a second time, so a coupon on a multi-unit line discounts far more than its percentage of that line.",
+    "why_plausible": "An agent that only skimmed the coupon helper assumes the cost it was handed is a unit price and 'fixes' the missing quantity factor, not noticing quantity was already applied upstream.",
+    "old": "    Some(c) => Ok(cost * c.percent / 100),",
+    "new": "    Some(c) => Ok(cost * c.percent / 100 * l.qty),",
+    "py_old": "    return _int_div(cost * c.percent, 100)",
+    "py_new": "    return _int_div(cost * c.percent, 100) * l.qty"
+  },
+  {
+    "id": "b11",
+    "target": "tier_discount",
+    "area": "pricing",
+    "description": "The tier discount divides by one hundred before multiplying by the percentage, so integer truncation happens first and the discount is rounded down to whole-dollar steps.",
+    "why_plausible": "An agent reordering the arithmetic to avoid a large intermediate product assumes integer multiplication and division commute.",
+    "old": "  subtotal_cents * tier_percent(subtotal_cents) / 100",
+    "new": "  subtotal_cents / 100 * tier_percent(subtotal_cents)",
+    "py_old": "    return _int_div(subtotal_cents * tier_percent(subtotal_cents), 100)",
+    "py_new": "    return _int_div(subtotal_cents, 100) * tier_percent(subtotal_cents)"
+  },
+  {
+    "id": "b12",
+    "target": "coupon_for",
+    "area": "pricing",
+    "description": "When several coupons target the same sku, the last matching coupon in the list is selected instead of the first.",
+    "why_plausible": "An agent rewriting the lookup as an accumulation while adding multi-coupon support overwrites the accumulator on every match, quietly turning first-wins into last-wins.",
+    "old": "  find(coupons, (c: Coupon) => c.sku == sku)",
+    "new": "  fold(coupons, None, (acc: Option[Coupon], c: Coupon) => if c.sku == sku then Some(c) else acc)",
+    "py_old": "    for c in coupons:\n        if c.sku == sku:\n            return c\n    return None",
+    "py_new": "    found: Coupon | None = None\n    for c in coupons:\n        if c.sku == sku:\n            found = c\n    return found"
+  },
+  {
+    "id": "b13",
+    "target": "price_cart",
+    "area": "pricing",
+    "description": "The shipping fee is decided from the pre-discount subtotal rather than the discounted amount, so a cart whose discount drops it below the free-shipping threshold still ships free.",
+    "why_plausible": "An agent that read only the shipping helper and the subtotal line wires in the most obvious amount, missing that the threshold is specified against the post-discount figure.",
+    "old": "  let ship = shipping_fee(discounted);",
+    "new": "  let ship = shipping_fee(sub);",
+    "py_old": "    ship = shipping_fee(discounted)",
+    "py_new": "    ship = shipping_fee(sub)"
+  },
+  {
+    "id": "b14",
+    "target": "can_transition",
+    "area": "orders",
+    "description": "A shipped order may now be moved to cancelled, so the shipped state is no longer terminal.",
+    "why_plausible": "Handed a request to support cancelling an order for a return, an agent opens the one transition it needs without noticing the state machine deliberately treats shipped as final.",
+    "old": "    Shipped => false,",
+    "new": "    Shipped => match to { Cancelled => true, _ => false },",
+    "py_old": "        case OrderState.SHIPPED:\n            return False",
+    "py_new": "        case OrderState.SHIPPED:\n            return to == OrderState.CANCELLED"
+  },
+  {
+    "id": "b15",
+    "target": "place_order",
+    "area": "orders",
+    "description": "A placed order stores the pre-discount subtotal as its recorded total instead of the final total including discounts and shipping.",
+    "why_plausible": "An agent that skimmed only the priced-cart record's field list picks the field whose name sounds like the order's value, missing that the payable total is a separate field computed later in the pipeline.",
+    "old": "        let placed = transition({..o, total_cents: priced.total}, Placed)?;",
+    "new": "        let placed = transition({..o, total_cents: priced.subtotal}, Placed)?;",
+    "py_old": "                    id=o.id, lines=o.lines, state=o.state, total_cents=priced.total",
+    "py_new": "                    id=o.id, lines=o.lines, state=o.state, total_cents=priced.subtotal"
+  },
+  {
+    "id": "b16",
+    "target": "cancel_order",
+    "area": "orders",
+    "description": "Cancelling an already-cancelled order succeeds and returns the order unchanged instead of reporting an illegal transition.",
+    "why_plausible": "An agent making cancellation idempotent for a retrying client adds a short-circuit, unaware the caller that restores inventory will now happily restock the same order twice.",
+    "old": "  transition(o, Cancelled)",
+    "new": "  match o.state { Cancelled => Ok(o), _ => transition(o, Cancelled), }",
+    "py_old": "    return transition(o, OrderState.CANCELLED)",
+    "py_new": "    if o.state == OrderState.CANCELLED:\n        return o\n    return transition(o, OrderState.CANCELLED)"
+  },
+  {
+    "id": "b17",
+    "target": "order_revenue",
+    "area": "reporting",
+    "description": "An order in the placed state contributes zero revenue; only shipped orders count.",
+    "why_plausible": "Asked to report recognized revenue rather than bookings, an agent narrows the shared revenue helper without noticing the same helper also decides which orders' lines count as sold in the best-seller report.",
+    "old": "    Placed => o.total_cents,",
+    "new": "    Placed => 0,",
+    "py_old": "        case OrderState.PLACED:\n            return o.total_cents",
+    "py_new": "        case OrderState.PLACED:\n            return 0"
+  },
+  {
+    "id": "b18",
+    "target": "max_line",
+    "area": "reporting",
+    "description": "When two lines tie on quantity the later-appearing line wins instead of the earlier one.",
+    "why_plausible": "An agent adjusting the comparison while adding a 'most recent wins' rule loosens the strict comparison and silently flips the documented tie-break.",
+    "old": "        Some(b) => if b.qty > l.qty then Some(b) else Some(l),",
+    "new": "        Some(b) => if b.qty >= l.qty then Some(b) else Some(l),",
+    "py_old": "    if best.qty > l.qty:",
+    "py_new": "    if best.qty >= l.qty:"
+  },
+  {
+    "id": "b19",
+    "target": "money_row",
+    "area": "receipt",
+    "description": "Every labelled money row on the receipt is rendered with a leading minus sign, not just the discount row.",
+    "why_plausible": "Asked to show the discount as a negative amount, an agent edits the shared row helper it happens to be looking at instead of that single call site, so the subtotal, shipping and total rows also turn negative.",
+    "old": "  \"  \" ++ label ++ \": \" ++ format_cents(cents)",
+    "new": "  \"  \" ++ label ++ \": -\" ++ format_cents(cents)",
+    "py_old": "    return \"  \" + label + \": \" + format_cents(cents)",
+    "py_new": "    return \"  \" + label + \": -\" + format_cents(cents)"
+  },
+  {
+    "id": "b20",
+    "target": "receipt",
+    "area": "receipt",
+    "description": "The receipt's total row prints the subtotal minus the discount, omitting the shipping fee that the order's real total includes.",
+    "why_plausible": "Acting on a report that 'the printed total doesn't equal subtotal minus discount', an agent recomputes the displayed total from the two rows above it without noticing shipping is added after the discount stage.",
+    "old": "            money_row(\"total\", p.total)],",
+    "new": "            money_row(\"total\", p.subtotal - p.discount)],",
+    "py_old": "            money_row(\"total\", p.total),",
+    "py_new": "            money_row(\"total\", p.subtotal - p.discount),"
+  }
+]

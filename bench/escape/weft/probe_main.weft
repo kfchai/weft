@@ -1,0 +1,470 @@
+# ------------------------------------------------------------
+# Differential probe (fragment).
+#
+# This file is NOT a standalone program. The harness builds the runnable
+# probe by taking core.weft, truncating it at the separator line that
+# immediately precedes "# Demo entry point", and appending this fragment
+# verbatim. Every name here is prefixed pb_ so it cannot collide with a
+# name in core.weft; the module's own `main` is truncated away, so the
+# `main` below is the program entry point.
+#
+# Every printed line is the observable result of a call. Calls that can
+# fail print their failure as a value ("err:<message>") so that a mutation
+# late in the module is never hidden by an early halt.
+# ------------------------------------------------------------
+
+def pb_row(label: Text, value: Text) -> Text = label ++ " = " ++ value
+
+def pb_product(p: Product) -> Text =
+  p.sku ++ "/" ++ p.name ++ "/" ++ text_of_int(p.unit_cents)
+
+def pb_opt_product(o: Option[Product]) -> Text =
+  match o { Some(p) => "some:" ++ pb_product(p), None => "none" }
+
+def pb_res_product(r: Result[Product, Text]) -> Text =
+  match r { Ok(p) => "ok:" ++ pb_product(p), Err(e) => "err:" ++ e }
+
+def pb_res_int(r: Result[Int, Text]) -> Text =
+  match r { Ok(v) => "ok:" ++ text_of_int(v), Err(e) => "err:" ++ e }
+
+def pb_stock(s: Stock) -> Text = s.sku ++ ":" ++ text_of_int(s.qty)
+
+def pb_opt_stock(o: Option[Stock]) -> Text =
+  match o { Some(s) => "some:" ++ pb_stock(s), None => "none" }
+
+def pb_inv(inv: List[Stock]) -> Text =
+  "[" ++ join(map(inv, (s: Stock) => pb_stock(s)), " ") ++ "]"
+
+def pb_res_inv(r: Result[List[Stock], Text]) -> Text =
+  match r { Ok(inv) => "ok:" ++ pb_inv(inv), Err(e) => "err:" ++ e }
+
+def pb_units(r: Result[List[Stock], Text]) -> Text =
+  match r { Ok(inv) => "ok:" ++ text_of_int(total_units(inv)), Err(e) => "err:" ++ e }
+
+def pb_line(l: Line) -> Text = l.sku ++ "x" ++ text_of_int(l.qty)
+
+def pb_opt_line(o: Option[Line]) -> Text =
+  match o { Some(l) => "some:" ++ pb_line(l), None => "none" }
+
+def pb_cart(cart: List[Line]) -> Text =
+  "[" ++ join(map(cart, (l: Line) => pb_line(l)), " ") ++ "]"
+
+def pb_coupon(c: Coupon) -> Text = c.sku ++ "@" ++ text_of_int(c.percent)
+
+def pb_opt_coupon(o: Option[Coupon]) -> Text =
+  match o { Some(c) => "some:" ++ pb_coupon(c), None => "none" }
+
+def pb_pricing(p: Pricing) -> Text =
+  "sub=" ++ text_of_int(p.subtotal) ++ " disc=" ++ text_of_int(p.discount)
+    ++ " ship=" ++ text_of_int(p.shipping) ++ " total=" ++ text_of_int(p.total)
+
+def pb_res_pricing(r: Result[Pricing, Text]) -> Text =
+  match r { Ok(p) => "ok:" ++ pb_pricing(p), Err(e) => "err:" ++ e }
+
+def pb_order(o: Order) -> Text =
+  "#" ++ text_of_int(o.id) ++ " " ++ state_name(o.state) ++ " " ++ pb_cart(o.lines)
+    ++ " total=" ++ text_of_int(o.total_cents)
+
+def pb_res_order(r: Result[Order, Text]) -> Text =
+  match r { Ok(o) => "ok:" ++ pb_order(o), Err(e) => "err:" ++ e }
+
+def pb_placement(pl: Placement) -> Text =
+  pb_order(pl.order) ++ " inv=" ++ pb_inv(pl.inv)
+
+def pb_res_placement(r: Result[Placement, Text]) -> Text =
+  match r { Ok(pl) => "ok:" ++ pb_placement(pl), Err(e) => "err:" ++ e }
+
+def pb_opt_text(o: Option[Text]) -> Text =
+  match o { Some(t) => "some:" ++ t, None => "none" }
+
+# ---- probe data ----
+
+def pb_skus: List[Text] =
+  ["TEA-001", "TEA-002", "MUG-001", "POT-001", "HNY-001", "KTL-001", "ZZZ", "tea-001", "-"]
+
+def pb_states: List[OrderState] = [Draft, Placed, Shipped, Cancelled]
+
+def pb_no_stock: List[Stock] = []
+
+def pb_no_lines: List[Line] = []
+
+def pb_no_coupons: List[Coupon] = []
+
+def pb_coupons: List[Coupon] =
+  [make_coupon("TEA-001", 15), make_coupon("POT-001", 90),
+   make_coupon("TEA-001", 1), make_coupon("HNY-001", 50)]
+
+def pb_cart_a: List[Line] = add_to_cart(pb_no_lines, "TEA-001", 2)
+
+def pb_cart_b: List[Line] = add_to_cart(add_to_cart(pb_cart_a, "POT-001", 1), "TEA-001", 3)
+
+def pb_cart_c: List[Line] = add_to_cart(pb_cart_b, "HNY-001", 4)
+
+def pb_cart_bad: List[Line] = add_to_cart(pb_cart_c, "ZZZ", 1)
+
+def pb_cart_10000: List[Line] = add_to_cart(pb_no_lines, "TEA-001", 8)
+
+def pb_cart_11250: List[Line] = add_to_cart(pb_no_lines, "TEA-001", 9)
+
+def pb_cart_50000: List[Line] =
+  add_to_cart(add_to_cart(pb_no_lines, "POT-001", 5), "MUG-001", 10)
+
+def pb_cart_50950: List[Line] = add_to_cart(pb_cart_50000, "HNY-001", 1)
+
+def pb_cart_31550: List[Line] =
+  add_to_cart(add_to_cart(add_to_cart(pb_no_lines, "KTL-001", 3), "TEA-001", 1), "MUG-001", 2)
+
+def pb_cart_31650: List[Line] =
+  add_to_cart(add_to_cart(add_to_cart(pb_no_lines, "KTL-001", 3), "MUG-001", 2), "TEA-002", 1)
+
+def pb_cart_huge: List[Line] = add_to_cart(pb_no_lines, "POT-001", 20)
+
+def pb_take_cases: List[Line] =
+  [{sku: "POT-001", qty: 1}, {sku: "POT-001", qty: 3}, {sku: "POT-001", qty: 4},
+   {sku: "POT-001", qty: 5}, {sku: "POT-001", qty: 99},
+   {sku: "TEA-001", qty: 1}, {sku: "TEA-001", qty: 40}, {sku: "TEA-001", qty: 41},
+   {sku: "KTL-001", qty: 6}, {sku: "KTL-001", qty: 7},
+   {sku: "MUG-001", qty: 12}, {sku: "MUG-001", qty: 13},
+   {sku: "ZZZ", qty: 1}]
+
+def pb_restock_cases: List[Line] =
+  [{sku: "POT-001", qty: 1}, {sku: "POT-001", qty: 3}, {sku: "POT-001", qty: 100},
+   {sku: "TEA-001", qty: 1}, {sku: "KTL-001", qty: 2}, {sku: "ZZZ", qty: 1}]
+
+def pb_cost_cases: List[Line] =
+  [{sku: "TEA-001", qty: 0}, {sku: "TEA-001", qty: 1}, {sku: "TEA-001", qty: 2},
+   {sku: "TEA-001", qty: 3}, {sku: "KTL-001", qty: 7}, {sku: "HNY-001", qty: 11},
+   {sku: "POT-001", qty: 1}, {sku: "ZZZ", qty: 1}]
+
+def pb_coupon_line_cases: List[Line] =
+  [{sku: "TEA-001", qty: 1}, {sku: "TEA-001", qty: 2}, {sku: "TEA-001", qty: 3},
+   {sku: "POT-001", qty: 1}, {sku: "POT-001", qty: 2}, {sku: "HNY-001", qty: 1},
+   {sku: "HNY-001", qty: 3}, {sku: "KTL-001", qty: 1}, {sku: "ZZZ", qty: 1}]
+
+def pb_clamp_subs: List[Int] = [0, 100, 100, 100, 100, 100, 0, 999999, 50000]
+
+def pb_clamp_discs: List[Int] = [0, 0, 50, 100, 101, 1000, 500, 1, 50000]
+
+def pb_orders: List[Order] =
+  [{id: 1, lines: [{sku: "TEA-001", qty: 2}], state: Placed, total_cents: 100},
+   {id: 2, lines: [{sku: "MUG-001", qty: 9}], state: Draft, total_cents: 999},
+   {id: 3, lines: [{sku: "TEA-001", qty: 1}, {sku: "HNY-001", qty: 3}], state: Shipped, total_cents: 250},
+   {id: 4, lines: [{sku: "POT-001", qty: 7}], state: Cancelled, total_cents: 400}]
+
+def pb_orders_placed: List[Order] =
+  [{id: 5, lines: [{sku: "A", qty: 2}], state: Placed, total_cents: 10}]
+
+def pb_orders_cancelled: List[Order] =
+  [{id: 6, lines: [{sku: "A", qty: 9}], state: Cancelled, total_cents: 10}]
+
+def pb_orders_draft: List[Order] =
+  [{id: 7, lines: [{sku: "A", qty: 9}], state: Draft, total_cents: 10}]
+
+def pb_orders_tie: List[Order] =
+  [{id: 8, lines: [{sku: "A", qty: 3}], state: Placed, total_cents: 10},
+   {id: 9, lines: [{sku: "B", qty: 3}], state: Shipped, total_cents: 10}]
+
+def pb_no_orders: List[Order] = []
+
+# An inventory that tracks skus with none on hand: a depleted sku must still
+# be found by find_stock, and must still be restockable.
+def pb_depleted: List[Stock] =
+  [Stock{sku: "TEA-001", qty: 0}, Stock{sku: "TEA-002", qty: 5},
+   Stock{sku: "MUG-001", qty: 0}, Stock{sku: "POT-001", qty: 1}]
+
+def pb_depleted_cases: List[Line] =
+  [{sku: "TEA-001", qty: 1}, {sku: "TEA-002", qty: 5}, {sku: "MUG-001", qty: 2},
+   {sku: "POT-001", qty: 1}, {sku: "POT-001", qty: 2}, {sku: "KTL-001", qty: 1}]
+
+# ---- probe entry point ----
+
+def main(io: Io) -> Int = {
+  let _ = print(io, pb_row("len catalog", text_of_int(len(catalog))));
+  let _ = print(io, join(map(catalog, (p: Product) => pb_row("catalog", pb_product(p))), "\n"));
+  let _ = print(io, join(map(pb_skus, (s: Text) =>
+    pb_row("find_product " ++ s, pb_opt_product(find_product(s)))), "\n"));
+  let _ = print(io, join(map(pb_skus, (s: Text) =>
+    pb_row("product_or_err " ++ s, pb_res_product(product_or_err(s)))), "\n"));
+  let _ = print(io, join(map(pb_skus, (s: Text) =>
+    pb_row("unit_price " ++ s, pb_res_int(unit_price(s)))), "\n"));
+  let _ = print(io, join(map([0, 1, 2, 8, 9, 10, 11, 19, 20, 50, 89, 90, 98, 99], (n: Int) =>
+    pb_row("pad2 " ++ text_of_int(n), pad2(n))), "\n"));
+  let _ = print(io, join(map(
+    [0, 1, 5, 9, 10, 50, 99, 100, 101, 105, 110, 150, 199, 200, 999, 1000, 1005,
+     1050, 1205, 1250, 9999, 10000, 10001, 100000, 123456, 999999], (n: Int) =>
+    pb_row("format_cents " ++ text_of_int(n), format_cents(n))), "\n"));
+  let _ = print(io, pb_row("initial_stock", pb_inv(initial_stock)));
+  let _ = print(io, pb_row("len initial_stock", text_of_int(len(initial_stock))));
+  let _ = print(io, join(map(initial_stock, (s: Stock) =>
+    pb_row("stock", pb_stock(s))), "\n"));
+  let _ = print(io, pb_row("total_units initial_stock", text_of_int(total_units(initial_stock))));
+  let _ = print(io, pb_row("total_units empty", text_of_int(total_units(pb_no_stock))));
+  let _ = print(io, join(map(pb_skus, (s: Text) =>
+    pb_row("find_stock " ++ s, pb_opt_stock(find_stock(initial_stock, s)))), "\n"));
+  let _ = print(io, pb_row("find_stock empty TEA-001", pb_opt_stock(find_stock(pb_no_stock, "TEA-001"))));
+  let _ = print(io, join(map(pb_skus, (s: Text) =>
+    pb_row("stock_qty " ++ s, text_of_int(stock_qty(initial_stock, s)))), "\n"));
+  let _ = print(io, pb_row("stock_qty empty TEA-001", text_of_int(stock_qty(pb_no_stock, "TEA-001"))));
+  let _ = print(io, join(map(pb_take_cases, (c: Line) =>
+    pb_row("take_stock " ++ pb_line(c), pb_res_inv(take_stock(initial_stock, c.sku, c.qty)))), "\n"));
+  let _ = print(io, pb_row("take_stock empty TEA-001 1", pb_res_inv(take_stock(pb_no_stock, "TEA-001", 1))));
+  let _ = print(io, join(map(pb_restock_cases, (c: Line) =>
+    pb_row("restock " ++ pb_line(c), pb_res_inv(restock(initial_stock, c.sku, c.qty)))), "\n"));
+  let _ = print(io, pb_row("restock empty TEA-001 1", pb_res_inv(restock(pb_no_stock, "TEA-001", 1))));
+  let _ = print(io, pb_row("total_units after take POT-001 4", pb_units(take_stock(initial_stock, "POT-001", 4))));
+  let _ = print(io, pb_row("total_units after restock POT-001 100", pb_units(restock(initial_stock, "POT-001", 100))));
+  let _ = print(io, pb_row("add_to_cart empty TEA-001 1", pb_cart(add_to_cart(pb_no_lines, "TEA-001", 1))));
+  let _ = print(io, pb_row("cart_a", pb_cart(pb_cart_a)));
+  let _ = print(io, pb_row("cart_b", pb_cart(pb_cart_b)));
+  let _ = print(io, pb_row("cart_c", pb_cart(pb_cart_c)));
+  let _ = print(io, pb_row("cart_bad", pb_cart(pb_cart_bad)));
+  let _ = print(io, pb_row("add_to_cart merge head", pb_cart(add_to_cart(pb_cart_c, "TEA-001", 10))));
+  let _ = print(io, pb_row("add_to_cart merge mid", pb_cart(add_to_cart(pb_cart_c, "POT-001", 10))));
+  let _ = print(io, pb_row("add_to_cart merge tail", pb_cart(add_to_cart(pb_cart_c, "HNY-001", 10))));
+  let _ = print(io, pb_row("add_to_cart new sku", pb_cart(add_to_cart(pb_cart_c, "KTL-001", 1))));
+  let _ = print(io, join(map(["TEA-001", "POT-001", "HNY-001", "KTL-001", "ZZZ"], (s: Text) =>
+    pb_row("cart_qty cart_c " ++ s, text_of_int(cart_qty(pb_cart_c, s)))), "\n"));
+  let _ = print(io, pb_row("cart_qty empty TEA-001", text_of_int(cart_qty(pb_no_lines, "TEA-001"))));
+  let _ = print(io, pb_row("cart_qty cart_bad ZZZ", text_of_int(cart_qty(pb_cart_bad, "ZZZ"))));
+  let _ = print(io, pb_row("cart_count empty", text_of_int(cart_count(pb_no_lines))));
+  let _ = print(io, pb_row("cart_count cart_a", text_of_int(cart_count(pb_cart_a))));
+  let _ = print(io, pb_row("cart_count cart_b", text_of_int(cart_count(pb_cart_b))));
+  let _ = print(io, pb_row("cart_count cart_c", text_of_int(cart_count(pb_cart_c))));
+  let _ = print(io, pb_row("cart_count cart_bad", text_of_int(cart_count(pb_cart_bad))));
+  let _ = print(io, join(map(pb_cost_cases, (l: Line) =>
+    pb_row("line_cost " ++ pb_line(l), pb_res_int(line_cost(l)))), "\n"));
+  let _ = print(io, pb_row("cart_subtotal empty", pb_res_int(cart_subtotal(pb_no_lines))));
+  let _ = print(io, pb_row("cart_subtotal cart_a", pb_res_int(cart_subtotal(pb_cart_a))));
+  let _ = print(io, pb_row("cart_subtotal cart_b", pb_res_int(cart_subtotal(pb_cart_b))));
+  let _ = print(io, pb_row("cart_subtotal cart_c", pb_res_int(cart_subtotal(pb_cart_c))));
+  let _ = print(io, pb_row("cart_subtotal cart_bad", pb_res_int(cart_subtotal(pb_cart_bad))));
+  let _ = print(io, pb_row("cart_subtotal two unknown",
+    pb_res_int(cart_subtotal([{sku: "ZZZ", qty: 1}, {sku: "YYY", qty: 1}]))));
+  let _ = print(io, pb_row("cart_subtotal unknown at tail",
+    pb_res_int(cart_subtotal([{sku: "TEA-001", qty: 1}, {sku: "ZZZ", qty: 1}]))));
+  let _ = print(io, join(map([1, 2, 45, 89, 90], (n: Int) =>
+    pb_row("make_coupon TEA-001 " ++ text_of_int(n), pb_coupon(make_coupon("TEA-001", n)))), "\n"));
+  let _ = print(io, pb_row("pb_coupons", join(map(pb_coupons, (c: Coupon) => pb_coupon(c)), " ")));
+  let _ = print(io, join(map(
+    [0, 1, 9999, 10000, 10001, 10002, 20000, 49999, 50000, 50001, 50002, 100000, 500000, 999999],
+    (n: Int) => pb_row("tier_percent " ++ text_of_int(n), text_of_int(tier_percent(n)))), "\n"));
+  let _ = print(io, join(map(
+    [0, 1, 19, 20, 9999, 10000, 10001, 10019, 10020, 20000, 49999, 50000, 50001,
+     50019, 50020, 100000, 500000, 999999],
+    (n: Int) => pb_row("tier_discount " ++ text_of_int(n), text_of_int(tier_discount(n)))), "\n"));
+  let _ = print(io, join(map(["TEA-001", "POT-001", "HNY-001", "KTL-001", "ZZZ"], (s: Text) =>
+    pb_row("coupon_for pb_coupons " ++ s, pb_opt_coupon(coupon_for(pb_coupons, s)))), "\n"));
+  let _ = print(io, pb_row("coupon_for empty TEA-001", pb_opt_coupon(coupon_for(pb_no_coupons, "TEA-001"))));
+  let _ = print(io, join(map(pb_coupon_line_cases, (l: Line) =>
+    pb_row("line_coupon_discount " ++ pb_line(l), pb_res_int(line_coupon_discount(pb_coupons, l)))), "\n"));
+  let _ = print(io, pb_row("line_coupon_discount 1pct TEA-001x1",
+    pb_res_int(line_coupon_discount([make_coupon("TEA-001", 1)], {sku: "TEA-001", qty: 1}))));
+  let _ = print(io, pb_row("line_coupon_discount 90pct TEA-001x1",
+    pb_res_int(line_coupon_discount([make_coupon("TEA-001", 90)], {sku: "TEA-001", qty: 1}))));
+  let _ = print(io, pb_row("line_coupon_discount no coupons TEA-001x2",
+    pb_res_int(line_coupon_discount(pb_no_coupons, {sku: "TEA-001", qty: 2}))));
+  let _ = print(io, pb_row("coupon_discount empty empty", pb_res_int(coupon_discount(pb_no_coupons, pb_no_lines))));
+  let _ = print(io, pb_row("coupon_discount empty cart_c", pb_res_int(coupon_discount(pb_no_coupons, pb_cart_c))));
+  let _ = print(io, pb_row("coupon_discount pb_coupons empty", pb_res_int(coupon_discount(pb_coupons, pb_no_lines))));
+  let _ = print(io, pb_row("coupon_discount pb_coupons cart_a", pb_res_int(coupon_discount(pb_coupons, pb_cart_a))));
+  let _ = print(io, pb_row("coupon_discount pb_coupons cart_c", pb_res_int(coupon_discount(pb_coupons, pb_cart_c))));
+  let _ = print(io, pb_row("coupon_discount pb_coupons cart_bad", pb_res_int(coupon_discount(pb_coupons, pb_cart_bad))));
+  let _ = print(io, join(map(zip(pb_clamp_subs, pb_clamp_discs), (p: {fst: Int, snd: Int}) =>
+    pb_row("clamp_total " ++ text_of_int(p.fst) ++ " " ++ text_of_int(p.snd),
+      text_of_int(clamp_total(p.fst, p.snd)))), "\n"));
+  let _ = print(io, join(map([0, 1, 499, 500, 29998, 29999, 30000, 30001, 30500, 50000, 999999], (n: Int) =>
+    pb_row("shipping_fee " ++ text_of_int(n), text_of_int(shipping_fee(n)))), "\n"));
+  let _ = print(io, pb_row("price_cart empty none", pb_res_pricing(price_cart(pb_no_lines, pb_no_coupons))));
+  let _ = print(io, pb_row("price_cart cart_a none", pb_res_pricing(price_cart(pb_cart_a, pb_no_coupons))));
+  let _ = print(io, pb_row("price_cart cart_a coupons", pb_res_pricing(price_cart(pb_cart_a, pb_coupons))));
+  let _ = print(io, pb_row("price_cart cart_c none", pb_res_pricing(price_cart(pb_cart_c, pb_no_coupons))));
+  let _ = print(io, pb_row("price_cart cart_c coupons", pb_res_pricing(price_cart(pb_cart_c, pb_coupons))));
+  let _ = print(io, pb_row("price_cart sub10000 none", pb_res_pricing(price_cart(pb_cart_10000, pb_no_coupons))));
+  let _ = print(io, pb_row("price_cart sub11250 none", pb_res_pricing(price_cart(pb_cart_11250, pb_no_coupons))));
+  let _ = print(io, pb_row("price_cart sub50000 none", pb_res_pricing(price_cart(pb_cart_50000, pb_no_coupons))));
+  let _ = print(io, pb_row("price_cart sub50950 none", pb_res_pricing(price_cart(pb_cart_50950, pb_no_coupons))));
+  let _ = print(io, pb_row("price_cart sub31550 none", pb_res_pricing(price_cart(pb_cart_31550, pb_no_coupons))));
+  let _ = print(io, pb_row("price_cart sub31650 none", pb_res_pricing(price_cart(pb_cart_31650, pb_no_coupons))));
+  let _ = print(io, pb_row("price_cart huge 90pct",
+    pb_res_pricing(price_cart(pb_cart_huge, [make_coupon("POT-001", 90)]))));
+  let _ = print(io, pb_row("price_cart huge 1pct",
+    pb_res_pricing(price_cart(pb_cart_huge, [make_coupon("POT-001", 1)]))));
+  let _ = print(io, pb_row("price_cart cart_bad coupons", pb_res_pricing(price_cart(pb_cart_bad, pb_coupons))));
+  let _ = print(io, join(map(pb_states, (s: OrderState) =>
+    pb_row("state_name", state_name(s))), "\n"));
+  let _ = print(io, join(map(pb_states, (a: OrderState) =>
+    join(map(pb_states, (b: OrderState) =>
+      pb_row("can_transition " ++ state_name(a) ++ " " ++ state_name(b),
+        text_of_bool(can_transition(a, b)))), "\n")), "\n"));
+  let _ = print(io, join(map(pb_states, (a: OrderState) =>
+    join(map(pb_states, (b: OrderState) =>
+      pb_row("transition " ++ state_name(a) ++ " " ++ state_name(b),
+        pb_res_order(transition({id: 9, lines: pb_cart_a, state: a, total_cents: 7}, b)))), "\n")), "\n"));
+  let _ = print(io, pb_row("new_order 1 empty", pb_order(new_order(1, pb_no_lines))));
+  let _ = print(io, pb_row("new_order 2 cart_a", pb_order(new_order(2, pb_cart_a))));
+  let _ = print(io, pb_row("new_order 3 cart_c", pb_order(new_order(3, pb_cart_c))));
+  let _ = print(io, pb_row("new_order 4 cart_bad", pb_order(new_order(4, pb_cart_bad))));
+  let _ = print(io, pb_row("take_lines empty lines", pb_res_inv(take_lines(initial_stock, pb_no_lines))));
+  let _ = print(io, pb_row("take_lines cart_a", pb_res_inv(take_lines(initial_stock, pb_cart_a))));
+  let _ = print(io, pb_row("take_lines cart_c", pb_res_inv(take_lines(initial_stock, pb_cart_c))));
+  let _ = print(io, pb_row("take_lines cart_bad", pb_res_inv(take_lines(initial_stock, pb_cart_bad))));
+  let _ = print(io, pb_row("take_lines exact POT-001x4",
+    pb_res_inv(take_lines(initial_stock, [{sku: "POT-001", qty: 4}]))));
+  let _ = print(io, pb_row("take_lines short POT-001x5",
+    pb_res_inv(take_lines(initial_stock, [{sku: "POT-001", qty: 5}]))));
+  let _ = print(io, pb_row("take_lines short at second",
+    pb_res_inv(take_lines(initial_stock, [{sku: "TEA-001", qty: 1}, {sku: "POT-001", qty: 5}]))));
+  let _ = print(io, pb_row("take_lines short at first",
+    pb_res_inv(take_lines(initial_stock, [{sku: "POT-001", qty: 5}, {sku: "TEA-001", qty: 1}]))));
+  let _ = print(io, pb_row("take_lines twice same sku",
+    pb_res_inv(take_lines(initial_stock, [{sku: "POT-001", qty: 2}, {sku: "POT-001", qty: 3}]))));
+  let _ = print(io, pb_row("take_lines empty inv", pb_res_inv(take_lines(pb_no_stock, pb_cart_a))));
+  let _ = print(io, pb_row("restock_lines empty lines", pb_res_inv(restock_lines(initial_stock, pb_no_lines))));
+  let _ = print(io, pb_row("restock_lines cart_a", pb_res_inv(restock_lines(initial_stock, pb_cart_a))));
+  let _ = print(io, pb_row("restock_lines cart_c", pb_res_inv(restock_lines(initial_stock, pb_cart_c))));
+  let _ = print(io, pb_row("restock_lines cart_bad", pb_res_inv(restock_lines(initial_stock, pb_cart_bad))));
+  let _ = print(io, pb_row("restock_lines unknown at head",
+    pb_res_inv(restock_lines(initial_stock, [{sku: "ZZZ", qty: 1}, {sku: "TEA-001", qty: 1}]))));
+  let _ = print(io, pb_row("restock_lines empty inv", pb_res_inv(restock_lines(pb_no_stock, pb_cart_a))));
+  let _ = print(io, pb_row("place_order empty lines",
+    pb_res_placement(place_order(new_order(100, pb_no_lines), initial_stock, pb_no_coupons))));
+  let _ = print(io, pb_row("place_order cart_a none",
+    pb_res_placement(place_order(new_order(101, pb_cart_a), initial_stock, pb_no_coupons))));
+  let _ = print(io, pb_row("place_order cart_a coupons",
+    pb_res_placement(place_order(new_order(102, pb_cart_a), initial_stock, pb_coupons))));
+  let _ = print(io, pb_row("place_order cart_c coupons",
+    pb_res_placement(place_order(new_order(103, pb_cart_c), initial_stock, pb_coupons))));
+  let _ = print(io, pb_row("place_order cart_bad",
+    pb_res_placement(place_order(new_order(104, pb_cart_bad), initial_stock, pb_no_coupons))));
+  let _ = print(io, pb_row("place_order short",
+    pb_res_placement(place_order(new_order(105, [{sku: "POT-001", qty: 5}]), initial_stock, pb_no_coupons))));
+  let _ = print(io, pb_row("place_order exact",
+    pb_res_placement(place_order(new_order(106, [{sku: "POT-001", qty: 4}]), initial_stock, pb_no_coupons))));
+  let _ = print(io, pb_row("place_order empty inv",
+    pb_res_placement(place_order(new_order(107, pb_cart_a), pb_no_stock, pb_no_coupons))));
+  let _ = print(io, join(map(pb_states, (s: OrderState) =>
+    pb_row("place_order from " ++ state_name(s),
+      pb_res_placement(place_order({id: 108, lines: pb_cart_a, state: s, total_cents: 0},
+        initial_stock, pb_no_coupons)))), "\n"));
+  let _ = print(io, join(map(pb_states, (s: OrderState) =>
+    pb_row("ship_order " ++ state_name(s),
+      pb_res_order(ship_order({id: 110, lines: pb_cart_a, state: s, total_cents: 3})))), "\n"));
+  let _ = print(io, join(map(pb_states, (s: OrderState) =>
+    pb_row("cancel_order " ++ state_name(s),
+      pb_res_order(cancel_order({id: 111, lines: pb_cart_a, state: s, total_cents: 3})))), "\n"));
+  let _ = print(io, join(map(pb_states, (s: OrderState) =>
+    pb_row("cancel_and_restock " ++ state_name(s),
+      pb_res_placement(cancel_and_restock({id: 112, lines: pb_cart_a, state: s, total_cents: 3},
+        initial_stock)))), "\n"));
+  let _ = print(io, pb_row("cancel_and_restock round trip",
+    match place_order(new_order(113, pb_cart_c), initial_stock, pb_coupons) {
+      Ok(pl) => pb_res_placement(cancel_and_restock(pl.order, pl.inv)),
+      Err(e) => "err:" ++ e,
+    }));
+  let _ = print(io, pb_row("cancel_and_restock unknown lines",
+    pb_res_placement(cancel_and_restock({id: 114, lines: pb_cart_bad, state: Placed, total_cents: 3},
+      initial_stock))));
+  let _ = print(io, pb_row("cancel_and_restock empty lines",
+    pb_res_placement(cancel_and_restock({id: 115, lines: pb_no_lines, state: Placed, total_cents: 3},
+      initial_stock))));
+  let _ = print(io, join(map(pb_states, (s: OrderState) =>
+    pb_row("order_revenue " ++ state_name(s) ++ " 100",
+      text_of_int(order_revenue({id: 120, lines: pb_no_lines, state: s, total_cents: 100})))), "\n"));
+  let _ = print(io, pb_row("order_revenue placed 0",
+    text_of_int(order_revenue({id: 121, lines: pb_no_lines, state: Placed, total_cents: 0}))));
+  let _ = print(io, pb_row("order_revenue shipped 999999",
+    text_of_int(order_revenue({id: 122, lines: pb_no_lines, state: Shipped, total_cents: 999999}))));
+  let _ = print(io, join(map(pb_orders, (o: Order) =>
+    pb_row("order_revenue order", text_of_int(order_revenue(o)))), "\n"));
+  let _ = print(io, pb_row("total_revenue none", text_of_int(total_revenue(pb_no_orders))));
+  let _ = print(io, pb_row("total_revenue pb_orders", text_of_int(total_revenue(pb_orders))));
+  let _ = print(io, pb_row("total_revenue placed", text_of_int(total_revenue(pb_orders_placed))));
+  let _ = print(io, pb_row("total_revenue cancelled", text_of_int(total_revenue(pb_orders_cancelled))));
+  let _ = print(io, pb_row("total_revenue draft", text_of_int(total_revenue(pb_orders_draft))));
+  let _ = print(io, pb_row("total_revenue tie", text_of_int(total_revenue(pb_orders_tie))));
+  let _ = print(io, pb_row("revenue_lines none", pb_cart(revenue_lines(pb_no_orders))));
+  let _ = print(io, pb_row("revenue_lines pb_orders", pb_cart(revenue_lines(pb_orders))));
+  let _ = print(io, pb_row("revenue_lines placed", pb_cart(revenue_lines(pb_orders_placed))));
+  let _ = print(io, pb_row("revenue_lines cancelled", pb_cart(revenue_lines(pb_orders_cancelled))));
+  let _ = print(io, pb_row("revenue_lines draft", pb_cart(revenue_lines(pb_orders_draft))));
+  let _ = print(io, pb_row("revenue_lines tie", pb_cart(revenue_lines(pb_orders_tie))));
+  let _ = print(io, pb_row("sku_totals none", pb_cart(sku_totals(pb_no_orders))));
+  let _ = print(io, pb_row("sku_totals pb_orders", pb_cart(sku_totals(pb_orders))));
+  let _ = print(io, pb_row("sku_totals placed", pb_cart(sku_totals(pb_orders_placed))));
+  let _ = print(io, pb_row("sku_totals cancelled", pb_cart(sku_totals(pb_orders_cancelled))));
+  let _ = print(io, pb_row("sku_totals tie", pb_cart(sku_totals(pb_orders_tie))));
+  let _ = print(io, pb_row("max_line empty", pb_opt_line(max_line(pb_no_lines))));
+  let _ = print(io, pb_row("max_line single", pb_opt_line(max_line([{sku: "A", qty: 1}]))));
+  let _ = print(io, pb_row("max_line ascending",
+    pb_opt_line(max_line([{sku: "A", qty: 1}, {sku: "B", qty: 2}, {sku: "C", qty: 3}]))));
+  let _ = print(io, pb_row("max_line descending",
+    pb_opt_line(max_line([{sku: "A", qty: 3}, {sku: "B", qty: 2}, {sku: "C", qty: 1}]))));
+  let _ = print(io, pb_row("max_line tie at head",
+    pb_opt_line(max_line([{sku: "A", qty: 3}, {sku: "B", qty: 3}, {sku: "C", qty: 2}]))));
+  let _ = print(io, pb_row("max_line tie at tail",
+    pb_opt_line(max_line([{sku: "A", qty: 1}, {sku: "B", qty: 9}, {sku: "C", qty: 9}]))));
+  let _ = print(io, pb_row("max_line all equal",
+    pb_opt_line(max_line([{sku: "A", qty: 4}, {sku: "B", qty: 4}, {sku: "C", qty: 4}]))));
+  let _ = print(io, pb_row("max_line peak in middle",
+    pb_opt_line(max_line([{sku: "A", qty: 1}, {sku: "B", qty: 9}, {sku: "C", qty: 2}]))));
+  let _ = print(io, pb_row("max_line zeros",
+    pb_opt_line(max_line([{sku: "A", qty: 0}, {sku: "B", qty: 0}]))));
+  let _ = print(io, pb_row("best_seller none", pb_opt_text(best_seller(pb_no_orders))));
+  let _ = print(io, pb_row("best_seller pb_orders", pb_opt_text(best_seller(pb_orders))));
+  let _ = print(io, pb_row("best_seller placed", pb_opt_text(best_seller(pb_orders_placed))));
+  let _ = print(io, pb_row("best_seller cancelled", pb_opt_text(best_seller(pb_orders_cancelled))));
+  let _ = print(io, pb_row("best_seller draft", pb_opt_text(best_seller(pb_orders_draft))));
+  let _ = print(io, pb_row("best_seller tie", pb_opt_text(best_seller(pb_orders_tie))));
+  let _ = print(io, join(map(pb_skus, (s: Text) =>
+    pb_row("display_name " ++ s, display_name(s))), "\n"));
+  let _ = print(io, join(map(
+    [{sku: "TEA-001", qty: 0}, {sku: "TEA-001", qty: 1}, {sku: "TEA-001", qty: 2},
+     {sku: "TEA-002", qty: 3}, {sku: "MUG-001", qty: 1}, {sku: "POT-001", qty: 2},
+     {sku: "HNY-001", qty: 7}, {sku: "KTL-001", qty: 1}, {sku: "ZZZ", qty: 1},
+     {sku: "ZZZ", qty: 0}], (l: Line) =>
+    pb_row("receipt_row " ++ pb_line(l), receipt_row(l))), "\n"));
+  let _ = print(io, join(map([0, 1, 9, 10, 99, 100, 101, 12345], (n: Int) =>
+    pb_row("money_row " ++ text_of_int(n), money_row("label", n))), "\n"));
+  let _ = print(io, pb_row("money_row Shipping", money_row("Shipping", 500)));
+  let _ = print(io, receipt(new_order(300, pb_cart_c), pb_no_coupons));
+  let _ = print(io, receipt(new_order(301, pb_cart_c), pb_coupons));
+  let _ = print(io, receipt(new_order(302, pb_no_lines), pb_no_coupons));
+  let _ = print(io, receipt(new_order(303, pb_cart_bad), pb_coupons));
+  let _ = print(io, receipt({id: 304, lines: pb_cart_a, state: Shipped, total_cents: 999}, pb_no_coupons));
+  let _ = print(io, receipt({id: 305, lines: pb_cart_a, state: Cancelled, total_cents: 0}, pb_coupons));
+  let _ = print(io, receipt({id: 306, lines: pb_cart_31650, state: Placed, total_cents: 0}, pb_no_coupons));
+  let pb_demo_cart = add_to_cart(add_to_cart(add_to_cart(pb_no_lines, "TEA-001", 2), "POT-001", 1), "TEA-001", 1);
+  let pb_demo_coupons = [make_coupon("TEA-001", 15)];
+  let _ = print(io, pb_row("demo cart", pb_cart(pb_demo_cart)));
+  let _ = print(io, match place_order(new_order(1001, pb_demo_cart), initial_stock, pb_demo_coupons) {
+    Ok(pl) => join([receipt(pl.order, pb_demo_coupons),
+      pb_row("demo units left", text_of_int(total_units(pl.inv))),
+      pb_row("demo best seller", display_name(unwrap_or(best_seller([pl.order]), "n/a"))),
+      pb_row("demo best seller raw", pb_opt_text(best_seller([pl.order])))], "\n"),
+    Err(e) => pb_row("demo failed", e),
+  });
+  let _ = print(io, pb_row("pb_depleted", pb_inv(pb_depleted)));
+  let _ = print(io, pb_row("total_units pb_depleted", text_of_int(total_units(pb_depleted))));
+  let _ = print(io, join(map(pb_skus, (s: Text) =>
+    pb_row("find_stock depleted " ++ s, pb_opt_stock(find_stock(pb_depleted, s)))), "\n"));
+  let _ = print(io, join(map(pb_skus, (s: Text) =>
+    pb_row("stock_qty depleted " ++ s, text_of_int(stock_qty(pb_depleted, s)))), "\n"));
+  let _ = print(io, join(map(pb_depleted_cases, (c: Line) =>
+    pb_row("take_stock depleted " ++ pb_line(c),
+      pb_res_inv(take_stock(pb_depleted, c.sku, c.qty)))), "\n"));
+  let _ = print(io, join(map(pb_depleted_cases, (c: Line) =>
+    pb_row("restock depleted " ++ pb_line(c),
+      pb_res_inv(restock(pb_depleted, c.sku, c.qty)))), "\n"));
+  let _ = print(io, pb_row("take_lines depleted stocked sku",
+    pb_res_inv(take_lines(pb_depleted, [{sku: "POT-001", qty: 1}]))));
+  let _ = print(io, pb_row("take_lines depleted zero sku",
+    pb_res_inv(take_lines(pb_depleted, [{sku: "TEA-001", qty: 1}]))));
+  let _ = print(io, pb_row("restock_lines depleted",
+    pb_res_inv(restock_lines(pb_depleted, [{sku: "TEA-001", qty: 1}, {sku: "POT-001", qty: 2}]))));
+  let _ = print(io, pb_row("place_order depleted",
+    pb_res_placement(place_order(new_order(400, [{sku: "POT-001", qty: 1}]), pb_depleted, pb_no_coupons))));
+  let _ = print(io, pb_row("cancel_and_restock depleted",
+    pb_res_placement(cancel_and_restock(
+      {id: 401, lines: [{sku: "TEA-001", qty: 2}], state: Placed, total_cents: 5}, pb_depleted))));
+  0
+}

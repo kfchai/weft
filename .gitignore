@@ -3,3 +3,10 @@
 
 # Generated benchmark work files (submission + hidden tests merged at grading time)
 /bench/work/
+
+# Escape-rate study: per-mutation working copies of both arms
+/bench/escape/work/
+__pycache__/
+.hypothesis/
+.mypy_cache/
+.pytest_cache/
