@@ -1,0 +1,148 @@
+{
+  "name": "weft",
+  "displayName": "Weft",
+  "description": "Language support for Weft — syntax, live [W#] diagnostics from weftc, and the check/run/test/repair loop in the editor.",
+  "version": "0.1.0",
+  "publisher": "weft-lang",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kfchai/weft"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "keywords": [
+    "weft",
+    "functional",
+    "llm"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:weft"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "weft",
+        "aliases": [
+          "Weft",
+          "weft"
+        ],
+        "extensions": [
+          ".weft"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "weft",
+        "scopeName": "source.weft",
+        "path": "./syntaxes/weft.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "weft.check",
+        "title": "Weft: Check File",
+        "category": "Weft"
+      },
+      {
+        "command": "weft.run",
+        "title": "Weft: Run File",
+        "category": "Weft"
+      },
+      {
+        "command": "weft.test",
+        "title": "Weft: Run Tests",
+        "category": "Weft"
+      },
+      {
+        "command": "weft.repairContext",
+        "title": "Weft: Repair Context (first failure → paste-ready payload)",
+        "category": "Weft"
+      },
+      {
+        "command": "weft.skeleton",
+        "title": "Weft: Skeleton (signatures + docs)",
+        "category": "Weft"
+      }
+    ],
+    "menus": {
+      "editor/title/run": [
+        {
+          "command": "weft.run",
+          "when": "resourceLangId == weft",
+          "group": "navigation@1"
+        },
+        {
+          "command": "weft.test",
+          "when": "resourceLangId == weft",
+          "group": "navigation@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "weft.check",
+          "when": "resourceLangId == weft"
+        },
+        {
+          "command": "weft.run",
+          "when": "resourceLangId == weft"
+        },
+        {
+          "command": "weft.test",
+          "when": "resourceLangId == weft"
+        },
+        {
+          "command": "weft.repairContext",
+          "when": "resourceLangId == weft"
+        },
+        {
+          "command": "weft.skeleton",
+          "when": "resourceLangId == weft"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Weft",
+      "properties": {
+        "weft.weftcPath": {
+          "type": "string",
+          "default": "weftc",
+          "markdownDescription": "Path to the `weftc` executable. If left as `weftc`, the extension first looks for a release build at `weftc/target/release/weftc(.exe)` inside the workspace before falling back to `weftc` on your PATH."
+        },
+        "weft.checkOnType": {
+          "type": "boolean",
+          "default": true,
+          "description": "Re-check the file as you type (debounced), without waiting for a save."
+        },
+        "weft.debounceMs": {
+          "type": "number",
+          "default": 300,
+          "description": "Idle time in milliseconds before an on-type check runs."
+        },
+        "weft.showHoles": {
+          "type": "boolean",
+          "default": true,
+          "description": "Surface typed holes (?name) as inline hints carrying their inferred type [W27]."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.0",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.4.0"
+  }
+}

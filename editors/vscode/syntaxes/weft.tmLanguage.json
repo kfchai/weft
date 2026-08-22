@@ -1,0 +1,134 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Weft",
+  "scopeName": "source.weft",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#definition" },
+    { "include": "#string" },
+    { "include": "#hole" },
+    { "include": "#keyword" },
+    { "include": "#constant" },
+    { "include": "#capability" },
+    { "include": "#builtin-type" },
+    { "include": "#stdlib" },
+    { "include": "#type-name" },
+    { "include": "#number" },
+    { "include": "#operator" }
+  ],
+  "repository": {
+    "comment": {
+      "comment": "[W4] comments run to end of line; rule citations get their own scope",
+      "match": "(#).*$",
+      "name": "comment.line.number-sign.weft",
+      "captures": {
+        "0": {
+          "patterns": [
+            { "match": "\\[W\\d+\\]", "name": "constant.other.rule.weft" }
+          ]
+        }
+      }
+    },
+    "definition": {
+      "comment": "[W16] def/infer name — capture the introduced name as a definition",
+      "match": "\\b(def|infer)\\s+([a-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.other.weft" },
+        "2": { "name": "entity.name.function.weft" }
+      }
+    },
+    "keyword": {
+      "patterns": [
+        {
+          "comment": "[W22][W23] control flow",
+          "match": "\\b(if|then|else|match|where)\\b",
+          "name": "keyword.control.weft"
+        },
+        {
+          "comment": "[W7][W16][W21][W34] declarations and bindings",
+          "match": "\\b(type|def|infer|test|let)\\b",
+          "name": "keyword.other.weft"
+        },
+        {
+          "comment": "[W25] boolean and unary word operators",
+          "match": "\\b(and|or|not)\\b",
+          "name": "keyword.operator.word.weft"
+        }
+      ]
+    },
+    "constant": {
+      "comment": "[W6] Bool and Unit literals",
+      "match": "\\b(true|false|unit)\\b",
+      "name": "constant.language.weft"
+    },
+    "capability": {
+      "comment": "[W30] capability types are the honest-signature markers — highlight distinctly",
+      "match": "\\b(Io|Fs|Rand|Clock|Model)\\b",
+      "name": "support.type.capability.weft"
+    },
+    "builtin-type": {
+      "comment": "[W9] builtin types and their variants",
+      "match": "\\b(Int|Float|Bool|Text|Unit|List|Option|Result|Some|None|Ok|Err)\\b",
+      "name": "support.type.builtin.weft"
+    },
+    "type-name": {
+      "comment": "[W5] user-declared type and variant names are CamelCase",
+      "match": "\\b[A-Z][A-Za-z0-9_]*\\b",
+      "name": "entity.name.type.weft"
+    },
+    "stdlib": {
+      "comment": "[W section 10] complete standard library; effectful ones take a capability first",
+      "match": "\\b(text_len|text_of_int|text_of_float|text_of_bool|int_of_text|split|join|contains|chars|to_upper|to_lower|trim|len|list_get|append|map|filter|fold|range|reverse|sort_by|zip|find|index_of|unwrap_or|ok_or|abs|min|max|int_to_float|float_to_int|print|read_line|fs|fs_read|fs_write|rand|rand_int|clock|now_ms|model)\\b",
+      "name": "support.function.stdlib.weft"
+    },
+    "hole": {
+      "comment": "[W27] typed holes",
+      "match": "\\?[a-z_][A-Za-z0-9_]*",
+      "name": "invalid.illegal.hole.weft"
+    },
+    "string": {
+      "comment": "[W6] Text literals with escapes",
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.weft",
+      "patterns": [
+        {
+          "match": "\\\\[nt\"\\\\]",
+          "name": "constant.character.escape.weft"
+        },
+        {
+          "match": "\\\\.",
+          "name": "invalid.illegal.unknown-escape.weft"
+        }
+      ]
+    },
+    "number": {
+      "patterns": [
+        {
+          "comment": "[W6] Float always has a dot",
+          "match": "\\b-?\\d+\\.\\d+\\b",
+          "name": "constant.numeric.float.weft"
+        },
+        {
+          "comment": "[W6] Int",
+          "match": "\\b-?\\d+\\b",
+          "name": "constant.numeric.integer.weft"
+        }
+      ]
+    },
+    "operator": {
+      "patterns": [
+        {
+          "comment": "[W20][W26][W10] arrows, propagation, function type",
+          "match": "->|=>|\\?",
+          "name": "keyword.operator.arrow.weft"
+        },
+        {
+          "comment": "[W25] concatenation, comparison, arithmetic, binding",
+          "match": "\\+\\+|==|!=|<=|>=|<|>|\\+|-|\\*|/|%|=",
+          "name": "keyword.operator.weft"
+        }
+      ]
+    }
+  }
+}
